@@ -5,7 +5,7 @@ import {
   getClientIp,
   runGeneration,
   type GenBody,
-} from '../server/generateCore'
+} from '../server/generateCore.js'
 
 export const config = {
   api: {
