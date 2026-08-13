@@ -30,7 +30,21 @@ export async function requestGeneration(
     signal,
   })
 
-  const data = (await res.json()) as GenerateResponseBody
+  const text = await res.text()
+  let data: GenerateResponseBody
+  try {
+    data = JSON.parse(text) as GenerateResponseBody
+  } catch {
+    if (res.status === 404) {
+      throw new Error(
+        'De generatie-API is niet bereikbaar (404). Controleer of de site op Vercel draait met OPENAI_API_KEY gezet.',
+      )
+    }
+    throw new Error(
+      `Onverwacht antwoord van de server (${res.status}). Probeer het opnieuw.`,
+    )
+  }
+
   if (!res.ok) {
     throw new Error(data.error ?? 'Genereren mislukt. Probeer het opnieuw.')
   }
