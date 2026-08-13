@@ -359,6 +359,25 @@
   margin-top: 1.75rem;
 }
 
+/* Upload-acties: mobiel vs desktop (niet via Tailwind — .cta-row zou display overrulen) */
+.upload-actions-mobile {
+  display: flex;
+}
+
+.upload-actions-desktop {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .upload-actions-mobile {
+    display: none;
+  }
+
+  .upload-actions-desktop {
+    display: flex;
+  }
+}
+
 .choice-card {
   width: 100%;
   text-align: left;

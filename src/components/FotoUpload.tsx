@@ -89,7 +89,7 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
           />
 
           {/* Mobiel: camera + galerij */}
-          <div className="cta-row sm:hidden">
+          <div className="cta-row upload-actions-mobile">
             <button
               type="button"
               className={`btn ${foto ? 'btn-secondary' : 'btn-primary'}`}
@@ -128,7 +128,7 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
           </div>
 
           {/* Desktop: één uploadknop */}
-          <div className="cta-row hidden sm:flex">
+          <div className="cta-row upload-actions-desktop">
             <button
               type="button"
               className={`btn ${foto ? 'btn-secondary' : 'btn-primary'}`}
