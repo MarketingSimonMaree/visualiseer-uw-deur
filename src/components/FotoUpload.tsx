@@ -13,7 +13,8 @@ interface Props {
 }
 
 export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +36,9 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
     } finally {
       setBusy(false)
       setProgress(null)
+      // Zelfde bestand opnieuw kunnen kiezen
+      if (cameraRef.current) cameraRef.current.value = ''
+      if (galleryRef.current) galleryRef.current.value = ''
     }
   }
 
@@ -66,8 +70,18 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
             <li>Maak de foto bij voldoende licht en zonder obstakels</li>
           </ul>
 
+          {/* Camera: capture forceert op mobiel de camera-app */}
           <input
-            ref={inputRef}
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            onChange={(e) => void handleFile(e.target.files?.[0])}
+          />
+          {/* Galerij: zonder capture → fotobibliotheek */}
+          <input
+            ref={galleryRef}
             type="file"
             accept="image/*,.heic,.heif"
             className="sr-only"
@@ -77,20 +91,30 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
           <div className="cta-row">
             <button
               type="button"
-              className="btn btn-primary"
+              className={`btn ${foto ? 'btn-secondary' : 'btn-primary'}`}
               disabled={busy}
-              onClick={() => inputRef.current?.click()}
+              onClick={() => cameraRef.current?.click()}
             >
-              {busy ? progress ?? 'Bezig…' : foto ? 'Andere foto kiezen' : 'Upload uw foto'}
+              {busy ? progress ?? 'Bezig…' : 'Foto maken'}
               <span className="btn-arrow" aria-hidden>
                 →
               </span>
             </button>
-
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={() => galleryRef.current?.click()}
+            >
+              Kies uit galerij
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
+            </button>
             {foto && (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-primary"
                 disabled={busy}
                 onClick={onContinue}
               >
