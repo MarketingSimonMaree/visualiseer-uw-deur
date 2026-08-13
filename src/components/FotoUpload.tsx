@@ -88,7 +88,8 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
             onChange={(e) => void handleFile(e.target.files?.[0])}
           />
 
-          <div className="cta-row">
+          {/* Mobiel: camera + galerij */}
+          <div className="cta-row sm:hidden">
             <button
               type="button"
               className={`btn ${foto ? 'btn-secondary' : 'btn-primary'}`}
@@ -107,6 +108,38 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
               onClick={() => galleryRef.current?.click()}
             >
               Kies uit galerij
+              <span className="btn-arrow" aria-hidden>
+                →
+              </span>
+            </button>
+            {foto && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={onContinue}
+              >
+                Volgende stap
+                <span className="btn-arrow" aria-hidden>
+                  →
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Desktop: één uploadknop */}
+          <div className="cta-row hidden sm:flex">
+            <button
+              type="button"
+              className={`btn ${foto ? 'btn-secondary' : 'btn-primary'}`}
+              disabled={busy}
+              onClick={() => galleryRef.current?.click()}
+            >
+              {busy
+                ? progress ?? 'Bezig…'
+                : foto
+                  ? 'Andere foto uploaden'
+                  : 'Upload uw foto'}
               <span className="btn-arrow" aria-hidden>
                 →
               </span>
