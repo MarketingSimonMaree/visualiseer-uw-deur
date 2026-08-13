@@ -70,7 +70,6 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
             ref={inputRef}
             type="file"
             accept="image/*,.heic,.heif"
-            capture="environment"
             className="sr-only"
             onChange={(e) => void handleFile(e.target.files?.[0])}
           />
