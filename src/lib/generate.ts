@@ -40,6 +40,11 @@ export async function requestGeneration(
         'De generatie-API is niet bereikbaar (404). Controleer of de site op Vercel draait met OPENAI_API_KEY gezet.',
       )
     }
+    if (res.status >= 500) {
+      throw new Error(
+        'De server gaf een fout (500). Vaak ontbreekt OPENAI_API_KEY in Vercel, of de deploy is nog bezig. Geen database nodig.',
+      )
+    }
     throw new Error(
       `Onverwacht antwoord van de server (${res.status}). Probeer het opnieuw.`,
     )
