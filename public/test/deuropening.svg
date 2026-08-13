@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1200" viewBox="0 0 960 1200">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e9e4db"/>
+      <stop offset="100%" stop-color="#d9d2c6"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#cbbba3"/>
+      <stop offset="100%" stop-color="#b09a7d"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="1200" fill="url(#wall)"/>
+  <polygon points="0,860 960,860 960,1200 0,1200" fill="url(#floor)"/>
+  <line x1="0" y1="860" x2="960" y2="860" stroke="#a89478" stroke-width="3"/>
+  <!-- Kozijn + opening vult het vlak -->
+  <polygon points="210,120 750,90 790,900 170,930" fill="#2c2c2c"/>
+  <polygon points="180,90 780,55 830,940 130,970" fill="none" stroke="#6d5e4d" stroke-width="34"/>
+  <polygon points="210,120 750,90 790,900 170,930" fill="none" stroke="#8a7a68" stroke-width="10"/>
+</svg>

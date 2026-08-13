@@ -1,0 +1,68 @@
+:root {
+  /* Kleuren — simonmaree.nl */
+  --colorWhite: #ffffff;
+  --colorBlack: #000000;
+  --colorAntraciet: #101010;
+  --colorGray: #ebebeb;
+  --colorDarkGray: #232323;
+  --colorGold: #b19654;
+  --colorPink: #d84f5b;
+  --colorGreen: #0da700;
+  --colorRed: #bc0606;
+  --colorPrimary: var(--colorPink);
+  --colorSecondary: var(--colorGold);
+  --colorBorder: #d5d5d5;
+  --colorError: var(--colorRed);
+  --colorSuccess: var(--colorGreen);
+  --colorText: var(--colorBlack);
+
+  /* Typografie */
+  --fontFamily: "Poppins", sans-serif;
+  --fontFamilySpecial: "Playfair Display", serif;
+  --fontWeightRegular: 400;
+  --fontWeightMedium: 500;
+  --fontWeightSemiBold: 600;
+  --fontWeightBold: 700;
+
+  /* Vorm */
+  --borderRadius: 13px;
+  --borderRadiusLarge: 20px;
+  --borderRadiusXLarge: 32px;
+
+  /* Formulieren */
+  --inputBorderRadius: 10px;
+  --inputBorderColor: #cfcfcf;
+  --inputBorderSize: 2px;
+  --inputSize: 64px;
+  --inputPadding: 16px 28px;
+  --inputFontSize: 21px;
+  --inputPlaceholderColor: #6e6e6e;
+
+  --transition: .2s;
+  --transitionLong: .5s;
+
+  /* Canvas — bewust neutraal (geen roze/goud rond de foto) */
+  --canvasBg: #f8f8f8;
+}
+
+body {
+  font-family: var(--fontFamily);
+  font-weight: var(--fontWeightRegular);
+  line-height: 1.6;
+  font-size: clamp(1rem, .6vw + .71rem, 1.31rem);
+  color: var(--colorText);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  background: var(--colorWhite);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
