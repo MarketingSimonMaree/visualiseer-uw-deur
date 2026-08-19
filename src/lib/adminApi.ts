@@ -46,7 +46,15 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
   const res = await fetch(path, { ...init, headers })
-  const data = (await res.json().catch(() => ({}))) as T & { error?: string }
+  const raw = await res.text()
+  let data = {} as T & { error?: string }
+  try {
+    data = raw ? (JSON.parse(raw) as T & { error?: string }) : ({} as T & { error?: string })
+  } catch {
+    data = { error: raw.slice(0, 200) || `Request mislukt (${res.status})` } as T & {
+      error?: string
+    }
+  }
   if (!res.ok) {
     if (res.status === 401) clearAdminToken()
     throw new Error(data.error ?? `Request mislukt (${res.status})`)

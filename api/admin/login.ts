@@ -3,7 +3,7 @@ import {
   createAdminToken,
   loadAdminSecret,
   loginAdminUser,
-} from '../../server/adminAuth'
+} from '../_lib/adminAuth'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
