@@ -1,14 +1,60 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { neon } from '@neondatabase/serverless'
-import {
-  DEFAULT_MAIL_TEMPLATES,
-  MAIL_PLACEHOLDERS,
-  type MailTemplate,
-  type MailTemplateId,
-} from '../shared/mailTemplates'
 
 export const config = { maxDuration: 30 }
+
+type MailTemplateId = 'klant' | 'leads'
+
+const MAIL_PLACEHOLDERS = [
+  { key: '{{naam}}', beschrijving: 'Naam van de klant' },
+  { key: '{{woonplaats}}', beschrijving: 'Woonplaats' },
+  { key: '{{email}}', beschrijving: 'E-mailadres van de klant' },
+  { key: '{{product}}', beschrijving: 'Gekozen deur / productnaam' },
+  { key: '{{kleur}}', beschrijving: 'Gekozen kleur' },
+  { key: '{{montagetype}}', beschrijving: 'Gekozen montagetype' },
+  { key: '{{prijsindicatie}}', beschrijving: 'ja / nee' },
+  { key: '{{bron}}', beschrijving: 'mail of offerte' },
+]
+
+const DEFAULT_MAIL_TEMPLATES: Array<{
+  id: MailTemplateId
+  label: string
+  subject: string
+  html: string
+}> = [
+  {
+    id: 'klant',
+    label: 'Mail naar de klant',
+    subject: 'Uw deurvisualisatie — {{product}}',
+    html: [
+      '<p>Beste {{naam}},</p>',
+      '<p>Hierbij uw visualisatie van <strong>{{product}}</strong> in <strong>{{kleur}}</strong>.</p>',
+      '<p>Montagetype: {{montagetype}}.<br/>Woonplaats: {{woonplaats}}.</p>',
+      '{{#prijsindicatie}}<p>U heeft aangegeven interesse te hebben in een prijsindicatie. Wij nemen zo snel mogelijk contact met u op.</p>{{/prijsindicatie}}',
+      '<p>Met vriendelijke groet,<br/>Simon Maree</p>',
+    ].join('\n'),
+  },
+  {
+    id: 'leads',
+    label: 'Interne lead-mail',
+    subject: 'Visualisatie-aanvraag ({{bron}}) — {{naam}} · {{woonplaats}}',
+    html: [
+      '<p>Nieuwe aanvraag via de deurvisualisator.</p>',
+      '<p><strong>Klant</strong><br/>',
+      'Naam: {{naam}}<br/>',
+      'Woonplaats: {{woonplaats}}<br/>',
+      'E-mail: {{email}}</p>',
+      '<p><strong>Keuzes</strong><br/>',
+      'Product: {{product}}<br/>',
+      'Kleur: {{kleur}}<br/>',
+      'Montagetype: {{montagetype}}<br/>',
+      'Prijsindicatie: {{prijsindicatie}}<br/>',
+      'Bron: {{bron}}</p>',
+      '<p>Bijlagen: visualisatie + originele kamerfoto van de klant.</p>',
+    ].join('\n'),
+  },
+]
 
 function bootstrapPassword() {
   return process.env.ADMIN_PASSWORD?.trim() || 'admin1234'
@@ -28,7 +74,6 @@ function bearerToken(authorization: string | string[] | undefined) {
   const m = /^Bearer\s+(.+)$/i.exec(raw.trim())
   return m?.[1]?.trim()
 }
-/** Token = exp.nonce.username.sig — username mag géén punten bevatten in oude tokens. */
 function requireAuth(req: VercelRequest) {
   const token = bearerToken(req.headers.authorization)
   if (!token) return false
@@ -47,47 +92,6 @@ function requireAuth(req: VercelRequest) {
   return safeEqual(sig, expected)
 }
 
-async function ensureMailTemplates(sql: ReturnType<typeof neon>) {
-  await sql`
-    CREATE TABLE IF NOT EXISTS mail_templates (
-      id TEXT PRIMARY KEY,
-      label TEXT NOT NULL,
-      subject TEXT NOT NULL,
-      html TEXT NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `
-  for (const t of DEFAULT_MAIL_TEMPLATES) {
-    await sql`
-      INSERT INTO mail_templates (id, label, subject, html, updated_at)
-      VALUES (${t.id}, ${t.label}, ${t.subject}, ${t.html}, now())
-      ON CONFLICT (id) DO NOTHING
-    `
-  }
-}
-
-async function loadMailTemplates(): Promise<MailTemplate[]> {
-  const databaseUrl = process.env.DATABASE_URL?.trim()
-  if (!databaseUrl) return DEFAULT_MAIL_TEMPLATES.map((t) => ({ ...t }))
-
-  const sql = neon(databaseUrl)
-  await ensureMailTemplates(sql)
-  const rows = await sql`
-    SELECT id, label, subject, html
-    FROM mail_templates
-    ORDER BY id ASC
-  `
-  const list = (
-    rows as Array<{ id: string; label: string; subject: string; html: string }>
-  ).map((r) => ({
-    id: r.id as MailTemplateId,
-    label: r.label,
-    subject: r.subject,
-    html: r.html,
-  }))
-  return list.length ? list : DEFAULT_MAIL_TEMPLATES.map((t) => ({ ...t }))
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAuth(req)) {
     res.status(401).json({ error: 'Niet ingelogd' })
@@ -96,7 +100,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      const templates = await loadMailTemplates()
+      const databaseUrl = process.env.DATABASE_URL?.trim()
+      let templates = DEFAULT_MAIL_TEMPLATES.map((t) => ({ ...t }))
+
+      if (databaseUrl) {
+        const sql = neon(databaseUrl)
+        await sql`
+          CREATE TABLE IF NOT EXISTS mail_templates (
+            id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            html TEXT NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          )
+        `
+        for (const t of DEFAULT_MAIL_TEMPLATES) {
+          await sql`
+            INSERT INTO mail_templates (id, label, subject, html, updated_at)
+            VALUES (${t.id}, ${t.label}, ${t.subject}, ${t.html}, now())
+            ON CONFLICT (id) DO NOTHING
+          `
+        }
+        const rows = await sql`
+          SELECT id, label, subject, html
+          FROM mail_templates
+          ORDER BY id ASC
+        `
+        const list = (
+          rows as Array<{
+            id: string
+            label: string
+            subject: string
+            html: string
+          }>
+        ).map((r) => ({
+          id: r.id as MailTemplateId,
+          label: r.label,
+          subject: r.subject,
+          html: r.html,
+        }))
+        if (list.length) templates = list
+      }
+
       res.status(200).json({
         templates,
         placeholders: MAIL_PLACEHOLDERS,
@@ -141,7 +186,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const defaults = DEFAULT_MAIL_TEMPLATES.find((t) => t.id === body.id)!
       const sql = neon(databaseUrl)
-      await ensureMailTemplates(sql)
+      await sql`
+        CREATE TABLE IF NOT EXISTS mail_templates (
+          id TEXT PRIMARY KEY,
+          label TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          html TEXT NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `
       const existing = await sql`
         SELECT id, label, subject, html FROM mail_templates WHERE id = ${body.id} LIMIT 1
       `
