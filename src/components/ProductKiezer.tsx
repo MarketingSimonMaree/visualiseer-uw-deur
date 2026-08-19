@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { collectiesVan } from '../data/producten'
 import type { Montagetype, Product } from '../types/product'
 
@@ -21,6 +21,7 @@ export function ProductKiezer({
 }: Props) {
   const [query, setQuery] = useState('')
   const [collectie, setCollectie] = useState<string | 'alle'>('alle')
+  const scrollerRef = useRef<HTMLUListElement>(null)
 
   const gefilterdOpType = useMemo(
     () => producten.filter((p) => p.montagetype === montagetype),
@@ -41,6 +42,14 @@ export function ProductKiezer({
       )
     })
   }, [gefilterdOpType, collectie, query])
+
+  function scrollByCards(direction: -1 | 1) {
+    const el = scrollerRef.current
+    if (!el) return
+    const card = el.querySelector<HTMLElement>('[data-product-card]')
+    const step = (card?.offsetWidth ?? 200) + 16
+    el.scrollBy({ left: direction * step * 2, behavior: 'smooth' })
+  }
 
   return (
     <section className="page" style={{ maxWidth: 1100 }}>
@@ -89,38 +98,62 @@ export function ProductKiezer({
           Geen deuren gevonden. Pas uw zoekopdracht of filter aan.
         </p>
       ) : (
-        <ul className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
-          {zichtbaar.map((p) => {
-            const selected = selectedId === p.id
-            return (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(p)}
-                  className={`teaserProduct w-full text-left ${selected ? 'is-selected' : ''}`}
-                >
-                  <div className="flex aspect-[3/4] items-center justify-center bg-[#f0f0f0] p-3">
-                    <img
-                      src={p.afbeeldingUrl}
-                      alt=""
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  </div>
-                  <div className="flex flex-1 flex-col gap-1 p-3 sm:p-4">
-                    <span className="font-bold leading-snug">{p.naam}</span>
-                    <span className="text-sm text-[var(--colorDarkGray)]">
-                      {p.collectie}
-                    </span>
-                    <span className="mt-auto inline-flex items-center gap-1 pt-2 text-sm font-semibold text-[var(--colorPrimary)]">
-                      Selecteer
-                      <span aria-hidden>→</span>
-                    </span>
-                  </div>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+        <div className="mt-6">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-sm text-[var(--colorDarkGray)]">
+              {zichtbaar.length} deuren · scroll naar rechts
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="product-carousel-nav"
+                aria-label="Vorige deuren"
+                onClick={() => scrollByCards(-1)}
+              >
+                ←
+              </button>
+              <button
+                type="button"
+                className="product-carousel-nav"
+                aria-label="Volgende deuren"
+                onClick={() => scrollByCards(1)}
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <ul ref={scrollerRef} className="product-carousel">
+            {zichtbaar.map((p) => {
+              const selected = selectedId === p.id
+              return (
+                <li key={p.id} data-product-card className="product-carousel-item">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(p)}
+                    className={`teaserProduct teaserProduct--compact w-full text-left ${selected ? 'is-selected' : ''}`}
+                  >
+                    <div className="product-carousel-image">
+                      <img src={p.afbeeldingUrl} alt="" />
+                    </div>
+                    <div className="flex flex-1 flex-col gap-1 p-3">
+                      <span className="line-clamp-2 text-sm font-bold leading-snug">
+                        {p.naam}
+                      </span>
+                      <span className="text-xs text-[var(--colorDarkGray)]">
+                        {p.collectie}
+                      </span>
+                      <span className="mt-auto inline-flex items-center gap-1 pt-2 text-sm font-semibold text-[var(--colorPrimary)]">
+                        Selecteer
+                        <span aria-hidden>→</span>
+                      </span>
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       )}
 
       <div className="cta-row">

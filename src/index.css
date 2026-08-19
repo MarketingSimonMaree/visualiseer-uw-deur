@@ -180,6 +180,80 @@
   box-shadow: 0 0 0 1px var(--colorPrimary);
 }
 
+.teaserProduct--compact {
+  min-height: 100%;
+}
+
+.product-carousel {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.75rem;
+  margin: 0;
+  list-style: none;
+}
+
+.product-carousel::-webkit-scrollbar {
+  height: 8px;
+}
+
+.product-carousel::-webkit-scrollbar-thumb {
+  background: #cfcfcf;
+  border-radius: 999px;
+}
+
+.product-carousel-item {
+  flex: 0 0 180px;
+  scroll-snap-align: start;
+}
+
+@media (min-width: 640px) {
+  .product-carousel-item {
+    flex-basis: 200px;
+  }
+}
+
+.product-carousel-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 260px;
+  background: #f0f0f0;
+  padding: 1rem 0.75rem;
+}
+
+.product-carousel-image img {
+  max-height: 100%;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.product-carousel-nav {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid var(--colorBorder);
+  background: #fff;
+  color: var(--colorText);
+  font-size: 1.1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.product-carousel-nav:hover {
+  border-color: var(--colorPrimary);
+  color: var(--colorPrimary);
+}
+
 .progress-bar {
   animation: progress-slide 1.4s ease-in-out infinite;
 }
