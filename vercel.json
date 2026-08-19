@@ -1,11 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "functions": {
-    "api/generate.ts": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  }
+  "rewrites": [
+    { "source": "/beheer", "destination": "/index.html" },
+    { "source": "/beheer/", "destination": "/index.html" }
+  ]
 }
