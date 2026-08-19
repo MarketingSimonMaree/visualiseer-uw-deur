@@ -3,17 +3,28 @@ import {
   adminLogin,
   changeAdminPasswordApi,
   clearAdminToken,
+  createAdminBeslag,
+  fetchAdminBeslag,
+  fetchAdminCollecties,
   fetchAdminKleuren,
+  fetchAdminMail,
   fetchAdminMontagetypes,
   fetchAdminProducten,
   getAdminToken,
   getAdminUsername,
+  patchAdminBeslag,
+  patchAdminMailTemplate,
   patchAdminMontagetype,
   patchAdminProductApi,
+  saveAdminCollectie,
   saveAdminKleur,
   saveAdminProduct,
+  type AdminBeslag,
   type AdminKleur,
+  type AdminMailMeta,
+  type AdminMailTemplate,
   type AdminProduct,
+  type CollectieDefault,
   type ProductInput,
 } from './lib/adminApi'
 import {
@@ -23,7 +34,14 @@ import {
   type MontagetypeDef,
 } from './types/product'
 
-type Tab = 'producten' | 'montagetypes' | 'kleuren' | 'profiel'
+type Tab =
+  | 'producten'
+  | 'collecties'
+  | 'montagetypes'
+  | 'beslag'
+  | 'kleuren'
+  | 'mail'
+  | 'profiel'
 
 const MONTAGETYPES = Object.keys(MONTAGETYPE_LABELS) as Montagetype[]
 const MATERIALEN: Materiaal[] = ['hout', 'staal', 'aluminium']
@@ -37,6 +55,8 @@ const emptyForm = (): ProductInput => ({
   materiaal: 'hout',
   collectie: '',
   kleurIds: ['ral-9010', 'ral-9005'],
+  beslagId: null,
+  agentExtra: '',
   actief: true,
 })
 
@@ -54,6 +74,15 @@ export default function AdminApp() {
   const [producten, setProducten] = useState<AdminProduct[]>([])
   const [montages, setMontages] = useState<MontagetypeDef[]>([])
   const [kleuren, setKleuren] = useState<AdminKleur[]>([])
+  const [beslagLijst, setBeslagLijst] = useState<AdminBeslag[]>([])
+  const [collectieDefaults, setCollectieDefaults] = useState<CollectieDefault[]>(
+    [],
+  )
+  const [mailMeta, setMailMeta] = useState<AdminMailMeta | null>(null)
+  const [editingMail, setEditingMail] = useState<AdminMailTemplate | null>(null)
+  const [editingCollectie, setEditingCollectie] =
+    useState<CollectieDefault | null>(null)
+  const [applyCollectieToProducts, setApplyCollectieToProducts] = useState(false)
   const [loading, setLoading] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'alle' | 'actief' | 'uit'>('alle')
@@ -63,6 +92,8 @@ export default function AdminApp() {
   const [saving, setSaving] = useState(false)
 
   const [editingMontage, setEditingMontage] = useState<MontagetypeDef | null>(null)
+  const [editingBeslag, setEditingBeslag] = useState<AdminBeslag | null>(null)
+  const [isNewBeslag, setIsNewBeslag] = useState(false)
   const [editingKleur, setEditingKleur] = useState<AdminKleur | null>(null)
   const [isNewKleur, setIsNewKleur] = useState(false)
 
@@ -83,14 +114,20 @@ export default function AdminApp() {
     setLoading(true)
     setError(null)
     try {
-      const [p, m, k] = await Promise.all([
+      const [p, m, k, b, mail, cols] = await Promise.all([
         fetchAdminProducten(),
         fetchAdminMontagetypes(),
         fetchAdminKleuren(),
+        fetchAdminBeslag(),
+        fetchAdminMail(),
+        fetchAdminCollecties(),
       ])
       setProducten(p)
       setMontages(m)
       setKleuren(k)
+      setBeslagLijst(b.beslag)
+      setCollectieDefaults(cols)
+      setMailMeta(mail)
       setAuthed(true)
     } catch (err) {
       setAuthed(false)
@@ -182,6 +219,8 @@ export default function AdminApp() {
       materiaal: p.materiaal,
       collectie: p.collectie,
       kleurIds: p.kleurIds?.length ? p.kleurIds : [],
+      beslagId: p.beslagId ?? null,
+      agentExtra: p.agentExtra ?? '',
       actief: p.actief,
     })
   }
@@ -302,8 +341,11 @@ export default function AdminApp() {
           {(
             [
               ['producten', 'Producten'],
+              ['collecties', 'Collecties'],
               ['montagetypes', 'Montagetypes'],
+              ['beslag', 'Beslag'],
               ['kleuren', 'Kleuren'],
+              ['mail', 'E-mail'],
               ['profiel', 'Profiel'],
             ] as const
           ).map(([id, label]) => (
@@ -433,6 +475,73 @@ export default function AdminApp() {
           </>
         )}
 
+        {!loading && tab === 'collecties' && (
+          <div className="mt-6">
+            <h1 className="section-title text-2xl sm:text-3xl">
+              <span className="gold">Collecties</span>
+            </h1>
+            <p className="mt-1 text-[var(--colorDarkGray)]">
+              Standaarden per categorie (bijv. Aluminium voordeuren): montagetypes,
+              kleuren, beslag en extra info voor de image-agent. Lege
+              productvelden nemen deze over. Met “toepassen” schrijf je ze ook
+              door naar alle producten in die collectie.
+            </p>
+            <ul className="mt-8 flex flex-col gap-3">
+              {collectieDefaults.map((c) => {
+                const productCount = producten.filter(
+                  (p) => p.collectie === c.collectie,
+                ).length
+                return (
+                  <li
+                    key={c.collectie}
+                    className="rounded-xl border border-[var(--colorBorder)] bg-white p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{c.collectie}</p>
+                        <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
+                          {productCount} producten ·{' '}
+                          {c.montagetypes.length
+                            ? c.montagetypes
+                                .map((id) => MONTAGETYPE_LABELS[id as Montagetype] ?? id)
+                                .join(', ')
+                            : 'geen montage-default'}{' '}
+                          ·{' '}
+                          {c.kleurIds.length
+                            ? `${c.kleurIds.length} kleuren`
+                            : 'geen kleur-default'}{' '}
+                          ·{' '}
+                          {beslagLijst.find((b) => b.id === c.beslagId)?.label ??
+                            'geen beslag-default'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-full border border-[var(--colorPrimary)] px-3 py-1.5 text-sm font-medium text-[var(--colorPrimary)]"
+                        onClick={() => {
+                          setApplyCollectieToProducts(false)
+                          setEditingCollectie({
+                            ...c,
+                            montagetypes: c.montagetypes ?? [],
+                            kleurIds: c.kleurIds ?? [],
+                          })
+                        }}
+                      >
+                        Bewerken
+                      </button>
+                    </div>
+                    {c.agentExtra && (
+                      <p className="mt-3 rounded-lg bg-[#f7f7f7] p-3 text-sm text-[var(--colorDarkGray)]">
+                        Agent: {c.agentExtra}
+                      </p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
         {!loading && tab === 'montagetypes' && (
           <div className="mt-6">
             <h1 className="section-title text-2xl sm:text-3xl">
@@ -467,6 +576,81 @@ export default function AdminApp() {
                     <p className="mb-1 font-semibold">Agent-prompt</p>
                     <p className="whitespace-pre-wrap text-[var(--colorDarkGray)]">
                       {m.agentPrompt || '—'}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!loading && tab === 'beslag' && (
+          <div className="mt-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h1 className="section-title text-2xl sm:text-3xl">
+                  <span className="gold">Beslag</span>
+                </h1>
+                <p className="mt-1 text-[var(--colorDarkGray)]">
+                  Vooraf bepalen welk beslag bij een deur hoort. Collectie-defaults
+                  gelden als een product geen eigen beslag heeft.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setIsNewBeslag(true)
+                  setEditingBeslag({
+                    id: '',
+                    label: '',
+                    hint: '',
+                    agentPrompt: '',
+                    actief: true,
+                    sortOrder: 100,
+                  })
+                }}
+              >
+                Nieuw beslag
+              </button>
+            </div>
+
+            <p className="mt-8 text-sm text-[var(--colorDarkGray)]">
+              Standaard beslag, kleuren, montagetypes en agent-info per categorie
+              stel je in onder <strong>Collecties</strong>.
+            </p>
+
+            <ul className="mt-8 flex flex-col gap-4">
+              {beslagLijst.map((b) => (
+                <li
+                  key={b.id}
+                  className="rounded-xl border border-[var(--colorBorder)] bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{b.label}</p>
+                      <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
+                        {b.hint}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--colorDarkGray)]">
+                        {b.id}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-full border border-[var(--colorPrimary)] px-3 py-1.5 text-sm font-medium text-[var(--colorPrimary)]"
+                      onClick={() => {
+                        setIsNewBeslag(false)
+                        setEditingBeslag({ ...b })
+                      }}
+                    >
+                      Bewerken
+                    </button>
+                  </div>
+                  <div className="mt-3 rounded-lg bg-[#f7f7f7] p-3 text-sm">
+                    <p className="mb-1 font-semibold">Agent-prompt</p>
+                    <p className="whitespace-pre-wrap text-[var(--colorDarkGray)]">
+                      {b.agentPrompt || '—'}
                     </p>
                   </div>
                 </li>
@@ -522,6 +706,90 @@ export default function AdminApp() {
                 setEditingKleur({ ...k })
               }}
             />
+          </div>
+        )}
+
+        {!loading && tab === 'mail' && mailMeta && (
+          <div className="mt-6">
+            <h1 className="section-title text-2xl sm:text-3xl">
+              <span className="gold">E-mail</span>
+            </h1>
+            <p className="mt-1 text-[var(--colorDarkGray)]">
+              Opmaak van klant- en lead-mails. Klantgegevens (naam, woonplaats,
+              e-mail) gaan alleen mee in de mail en worden niet opgeslagen.
+            </p>
+
+            <div className="mt-6 rounded-xl border border-[var(--colorBorder)] bg-[#fbf8f0] p-4 text-sm text-[var(--colorDarkGray)]">
+              <p className="font-semibold text-[var(--colorBlack)]">
+                Wat gaat mee
+              </p>
+              <p className="mt-2">{mailMeta.privacy}</p>
+              <p className="mt-3 font-medium text-[var(--colorBlack)]">Velden</p>
+              <ul className="mt-1 list-disc pl-5">
+                {mailMeta.velden.map((v) => (
+                  <li key={v}>{v}</li>
+                ))}
+              </ul>
+              <p className="mt-3 font-medium text-[var(--colorBlack)]">
+                Bijlagen
+              </p>
+              <ul className="mt-1 list-disc pl-5">
+                <li>
+                  Klantmail:{' '}
+                  {mailMeta.bijlagen.klant.join(', ')}
+                </li>
+                <li>
+                  Lead-mail:{' '}
+                  {mailMeta.bijlagen.leads.join(', ')}
+                </li>
+              </ul>
+              <p className="mt-3 font-medium text-[var(--colorBlack)]">
+                Placeholders
+              </p>
+              <ul className="mt-1 list-disc pl-5">
+                {mailMeta.placeholders.map((p) => (
+                  <li key={p.key}>
+                    <code>{p.key}</code> — {p.beschrijving}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs">
+                Optioneel blok:{' '}
+                <code>{'{{#prijsindicatie}}…{{/prijsindicatie}}'}</code> (alleen
+                zichtbaar als prijsindicatie = ja).
+              </p>
+            </div>
+
+            <ul className="mt-8 flex flex-col gap-4">
+              {mailMeta.templates.map((t) => (
+                <li
+                  key={t.id}
+                  className="rounded-xl border border-[var(--colorBorder)] bg-white p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{t.label}</p>
+                      <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
+                        Onderwerp: {t.subject}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-full border border-[var(--colorPrimary)] px-3 py-1.5 text-sm font-medium text-[var(--colorPrimary)]"
+                      onClick={() => setEditingMail({ ...t })}
+                    >
+                      Bewerken
+                    </button>
+                  </div>
+                  <div className="mt-3 rounded-lg bg-[#f7f7f7] p-3 text-sm">
+                    <p className="mb-1 font-semibold">HTML</p>
+                    <pre className="whitespace-pre-wrap font-sans text-[var(--colorDarkGray)]">
+                      {t.html}
+                    </pre>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -703,6 +971,34 @@ export default function AdminApp() {
                 })}
               </div>
             </fieldset>
+            <Field label="Beslag (optioneel, overschrijft collectie-default)">
+              <select
+                value={editing.beslagId ?? ''}
+                onChange={(e) =>
+                  setEditing({
+                    ...editing,
+                    beslagId: e.target.value || null,
+                  })
+                }
+              >
+                <option value="">Collectie-default / geen</option>
+                {beslagLijst.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Extra info voor de image-agent (dit product)">
+              <textarea
+                rows={3}
+                value={editing.agentExtra ?? ''}
+                onChange={(e) =>
+                  setEditing({ ...editing, agentExtra: e.target.value })
+                }
+                placeholder="Bijv. altijd mat zwarte trekstang, geen deurkruk…"
+              />
+            </Field>
             <label className="mt-4 flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -721,6 +1017,356 @@ export default function AdminApp() {
                 type="button"
                 className="rounded-full border px-4 py-2"
                 onClick={() => setEditing(null)}
+              >
+                Annuleren
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {editingCollectie && (
+        <Modal
+          title={`Collectie: ${editingCollectie.collectie}`}
+          onClose={() => setEditingCollectie(null)}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void saveAdminCollectie({
+                ...editingCollectie,
+                applyToProducts: applyCollectieToProducts,
+              })
+                .then(({ collectie }) => {
+                  setCollectieDefaults((prev) =>
+                    prev.map((x) =>
+                      x.collectie === collectie.collectie ? collectie : x,
+                    ),
+                  )
+                  setEditingCollectie(null)
+                  if (applyCollectieToProducts) {
+                    void loadAll()
+                  }
+                })
+                .catch((err: unknown) =>
+                  setError(
+                    err instanceof Error ? err.message : 'Opslaan mislukt',
+                  ),
+                )
+            }}
+          >
+            <fieldset className="mt-2">
+              <legend className="text-sm font-medium">Montagetypes</legend>
+              <div className="mt-2 flex flex-col gap-2">
+                {MONTAGETYPES.map((m) => {
+                  const checked = editingCollectie.montagetypes.includes(m)
+                  return (
+                    <label key={m} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? editingCollectie.montagetypes.filter((x) => x !== m)
+                            : [...editingCollectie.montagetypes, m]
+                          setEditingCollectie({
+                            ...editingCollectie,
+                            montagetypes: next,
+                          })
+                        }}
+                      />
+                      {MONTAGETYPE_LABELS[m]}
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
+
+            <fieldset className="mt-4">
+              <legend className="text-sm font-medium">Kleuren</legend>
+              <div className="mt-2 grid max-h-48 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                {kleuren.map((k) => {
+                  const checked = editingCollectie.kleurIds.includes(k.id)
+                  return (
+                    <label key={k.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? editingCollectie.kleurIds.filter((x) => x !== k.id)
+                            : [...editingCollectie.kleurIds, k.id]
+                          setEditingCollectie({
+                            ...editingCollectie,
+                            kleurIds: next,
+                          })
+                        }}
+                      />
+                      <span
+                        className="inline-block h-4 w-4 rounded border"
+                        style={{
+                          background: k.staaltjeUrl
+                            ? undefined
+                            : k.hex || '#ddd',
+                          backgroundImage: k.staaltjeUrl
+                            ? `url(${k.staaltjeUrl})`
+                            : undefined,
+                          backgroundSize: 'cover',
+                        }}
+                      />
+                      {k.naam}
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
+
+            <Field label="Beslag">
+              <select
+                value={editingCollectie.beslagId ?? ''}
+                onChange={(e) =>
+                  setEditingCollectie({
+                    ...editingCollectie,
+                    beslagId: e.target.value || null,
+                  })
+                }
+              >
+                <option value="">Geen default</option>
+                {beslagLijst.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Extra info voor de image-agent">
+              <textarea
+                rows={3}
+                value={editingCollectie.agentExtra}
+                onChange={(e) =>
+                  setEditingCollectie({
+                    ...editingCollectie,
+                    agentExtra: e.target.value,
+                  })
+                }
+                placeholder="Bijv. aluminium voordeur: strakke greep, geen trekstang…"
+              />
+            </Field>
+
+            <label className="mt-4 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={applyCollectieToProducts}
+                onChange={(e) =>
+                  setApplyCollectieToProducts(e.target.checked)
+                }
+              />
+              <span>
+                Ook doorzetten naar alle producten in deze collectie (overschrijft
+                montage/kleuren/beslag/agent-extra op die producten).
+              </span>
+            </label>
+
+            <div className="mt-6 flex gap-3">
+              <button type="submit" className="btn btn-primary">
+                Opslaan
+              </button>
+              <button
+                type="button"
+                className="rounded-full border px-4 py-2"
+                onClick={() => setEditingCollectie(null)}
+              >
+                Annuleren
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {editingBeslag && (
+        <Modal
+          title={isNewBeslag ? 'Nieuw beslag' : 'Beslag bewerken'}
+          onClose={() => setEditingBeslag(null)}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              const save = isNewBeslag
+                ? createAdminBeslag({
+                    id: editingBeslag.id || undefined,
+                    label: editingBeslag.label,
+                    hint: editingBeslag.hint,
+                    agentPrompt: editingBeslag.agentPrompt,
+                    sortOrder: editingBeslag.sortOrder,
+                  })
+                : patchAdminBeslag({
+                    id: editingBeslag.id,
+                    label: editingBeslag.label,
+                    hint: editingBeslag.hint,
+                    agentPrompt: editingBeslag.agentPrompt,
+                    actief: editingBeslag.actief,
+                    sortOrder: editingBeslag.sortOrder,
+                  })
+              void save
+                .then((b) => {
+                  setBeslagLijst((prev) => {
+                    const rest = prev.filter((x) => x.id !== b.id)
+                    return [...rest, b].sort(
+                      (a, c) => a.sortOrder - c.sortOrder || a.label.localeCompare(c.label, 'nl'),
+                    )
+                  })
+                  setEditingBeslag(null)
+                })
+                .catch((err: unknown) =>
+                  setError(err instanceof Error ? err.message : 'Opslaan mislukt'),
+                )
+            }}
+          >
+            {isNewBeslag && (
+              <Field label="ID (optioneel, anders uit label)">
+                <input
+                  className="field-input"
+                  value={editingBeslag.id}
+                  onChange={(e) =>
+                    setEditingBeslag({ ...editingBeslag, id: e.target.value })
+                  }
+                  placeholder="bijv. trekstang-verticaal"
+                />
+              </Field>
+            )}
+            <Field label="Label">
+              <input
+                className="field-input"
+                required
+                value={editingBeslag.label}
+                onChange={(e) =>
+                  setEditingBeslag({ ...editingBeslag, label: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="Hint (intern)">
+              <input
+                className="field-input"
+                value={editingBeslag.hint}
+                onChange={(e) =>
+                  setEditingBeslag({ ...editingBeslag, hint: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="Agent-prompt (Engels, voor beeldgeneratie)">
+              <textarea
+                className="field-input min-h-32"
+                value={editingBeslag.agentPrompt}
+                onChange={(e) =>
+                  setEditingBeslag({
+                    ...editingBeslag,
+                    agentPrompt: e.target.value,
+                  })
+                }
+              />
+            </Field>
+            {!isNewBeslag && (
+              <label className="mt-4 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editingBeslag.actief}
+                  onChange={(e) =>
+                    setEditingBeslag({
+                      ...editingBeslag,
+                      actief: e.target.checked,
+                    })
+                  }
+                />
+                Actief
+              </label>
+            )}
+            <div className="mt-6 flex gap-3">
+              <button type="submit" className="btn btn-primary">
+                Opslaan
+              </button>
+              <button
+                type="button"
+                className="rounded-full border px-4 py-2"
+                onClick={() => setEditingBeslag(null)}
+              >
+                Annuleren
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {editingMail && (
+        <Modal
+          title={`${editingMail.label} bewerken`}
+          onClose={() => setEditingMail(null)}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void patchAdminMailTemplate({
+                id: editingMail.id,
+                label: editingMail.label,
+                subject: editingMail.subject,
+                html: editingMail.html,
+              })
+                .then((t) => {
+                  setMailMeta((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          templates: prev.templates.map((x) =>
+                            x.id === t.id ? t : x,
+                          ),
+                        }
+                      : prev,
+                  )
+                  setEditingMail(null)
+                })
+                .catch((err: unknown) =>
+                  setError(
+                    err instanceof Error ? err.message : 'Opslaan mislukt',
+                  ),
+                )
+            }}
+          >
+            <Field label="Label">
+              <input
+                className="field-input"
+                value={editingMail.label}
+                onChange={(e) =>
+                  setEditingMail({ ...editingMail, label: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="Onderwerp">
+              <input
+                className="field-input"
+                value={editingMail.subject}
+                onChange={(e) =>
+                  setEditingMail({ ...editingMail, subject: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="HTML-inhoud">
+              <textarea
+                className="field-input min-h-48 font-mono text-sm"
+                value={editingMail.html}
+                onChange={(e) =>
+                  setEditingMail({ ...editingMail, html: e.target.value })
+                }
+              />
+            </Field>
+            <div className="mt-6 flex gap-3">
+              <button type="submit" className="btn btn-primary">
+                Opslaan
+              </button>
+              <button
+                type="button"
+                className="rounded-full border px-4 py-2"
+                onClick={() => setEditingMail(null)}
               >
                 Annuleren
               </button>

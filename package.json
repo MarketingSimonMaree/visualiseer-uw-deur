@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "import:producten": "node --env-file=.env.local scripts/import-producten.mjs",
     "migrate:admin-meta": "node --env-file=.env.local scripts/migrate-admin-meta.mjs",
-    "migrate:admin-meta": "node --env-file=.env.local scripts/migrate-admin-meta.mjs"
+    "migrate:beslag": "node --env-file=.env.local scripts/migrate-beslag.mjs",
+    "migrate:collectie-defaults": "node --env-file=.env.local scripts/migrate-collectie-defaults.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

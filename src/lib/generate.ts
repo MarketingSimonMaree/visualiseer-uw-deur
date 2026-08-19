@@ -6,6 +6,7 @@ export { buildGeneratePrompt }
 export interface GenerateRequestBody {
   roomImageBase64: string
   productImageUrl: string
+  productId: string
   productNaam: string
   kleur: string
   montagetype: Montagetype

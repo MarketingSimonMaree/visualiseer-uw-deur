@@ -7,6 +7,8 @@ import {
   runGeneration,
   type GenBody,
 } from './generateCore.ts'
+import { processMailResultaat, loadMailTemplates, saveMailTemplate } from '../shared/mailResultaatCore.ts'
+import { MAIL_PLACEHOLDERS } from '../shared/mailTemplates.ts'
 import {
   bearerToken,
   changeAdminPassword,
@@ -409,6 +411,578 @@ export function generateApiPlugin(): Plugin {
               return
             }
             sendJson(res, 405, { error: 'Method not allowed' })
+            return
+          }
+
+          if (pathname === '/api/admin-beslag') {
+            if (!isAuthed(req, root)) {
+              sendJson(res, 401, { error: 'Niet ingelogd' })
+              return
+            }
+            const { neon } = await import('@neondatabase/serverless')
+            const dbUrl =
+              process.env.DATABASE_URL ||
+              (() => {
+                for (const name of ['.env.local', '.env']) {
+                  const p = resolve(root, name)
+                  if (!existsSync(p)) continue
+                  const line = readFileSync(p, 'utf8')
+                    .split('\n')
+                    .find((l) => l.startsWith('DATABASE_URL='))
+                  if (line) {
+                    return line
+                      .slice('DATABASE_URL='.length)
+                      .trim()
+                      .replace(/^["']|["']$/g, '')
+                  }
+                }
+                return undefined
+              })()
+            if (!dbUrl) throw new Error('DATABASE_URL ontbreekt')
+            const sql = neon(dbUrl)
+
+            const mapBeslag = (r: {
+              id: string
+              label: string
+              hint: string
+              agent_prompt: string
+              sort_order: number
+              actief: boolean
+            }) => ({
+              id: r.id,
+              label: r.label,
+              hint: r.hint,
+              agentPrompt: r.agent_prompt,
+              sortOrder: r.sort_order,
+              actief: r.actief !== false,
+            })
+
+            if (req.method === 'GET') {
+              const [beslagRows, collectieRows] = await Promise.all([
+                sql`
+                  SELECT id, label, hint, agent_prompt, sort_order, actief
+                  FROM beslag_defs
+                  ORDER BY sort_order ASC, label ASC
+                `,
+                sql`
+                  SELECT collectie, beslag_id, agent_extra
+                  FROM collectie_defaults
+                  ORDER BY collectie ASC
+                `,
+              ])
+              sendJson(res, 200, {
+                beslag: (
+                  beslagRows as Array<Parameters<typeof mapBeslag>[0]>
+                ).map(mapBeslag),
+                collectieDefaults: (
+                  collectieRows as Array<{
+                    collectie: string
+                    beslag_id: string | null
+                    agent_extra: string
+                  }>
+                ).map((r) => ({
+                  collectie: r.collectie,
+                  beslagId: r.beslag_id,
+                  agentExtra: r.agent_extra ?? '',
+                })),
+              })
+              return
+            }
+
+            if (req.method === 'PATCH') {
+              const body = (await readJsonBody(req)) as {
+                kind?: 'beslag' | 'collectie'
+                id?: string
+                collectie?: string
+                label?: string
+                hint?: string
+                agentPrompt?: string
+                actief?: boolean
+                sortOrder?: number
+                beslagId?: string | null
+                agentExtra?: string
+              }
+              if (body.kind === 'collectie') {
+                const collectie = body.collectie?.trim()
+                if (!collectie) {
+                  sendJson(res, 400, { error: 'collectie is verplicht' })
+                  return
+                }
+                const existing = await sql`
+                  SELECT collectie, beslag_id, agent_extra
+                  FROM collectie_defaults WHERE collectie = ${collectie} LIMIT 1
+                `
+                const cur = (
+                  existing as Array<{
+                    beslag_id: string | null
+                    agent_extra: string
+                  }>
+                )[0]
+                const beslagId =
+                  body.beslagId !== undefined
+                    ? body.beslagId
+                    : (cur?.beslag_id ?? null)
+                const agentExtra =
+                  body.agentExtra !== undefined
+                    ? body.agentExtra
+                    : (cur?.agent_extra ?? '')
+                await sql`
+                  INSERT INTO collectie_defaults (collectie, beslag_id, agent_extra, updated_at)
+                  VALUES (${collectie}, ${beslagId}, ${agentExtra}, now())
+                  ON CONFLICT (collectie) DO UPDATE SET
+                    beslag_id = EXCLUDED.beslag_id,
+                    agent_extra = EXCLUDED.agent_extra,
+                    updated_at = now()
+                `
+                sendJson(res, 200, {
+                  collectieDefault: { collectie, beslagId, agentExtra },
+                })
+                return
+              }
+              if (!body.id) {
+                sendJson(res, 400, { error: 'id is verplicht' })
+                return
+              }
+              const existing = await sql`
+                SELECT id, label, hint, agent_prompt, sort_order, actief
+                FROM beslag_defs WHERE id = ${body.id} LIMIT 1
+              `
+              const row = (existing as Array<Parameters<typeof mapBeslag>[0]>)[0]
+              if (!row) {
+                sendJson(res, 404, { error: 'Beslag niet gevonden' })
+                return
+              }
+              await sql`
+                UPDATE beslag_defs SET
+                  label = ${body.label ?? row.label},
+                  hint = ${body.hint ?? row.hint},
+                  agent_prompt = ${body.agentPrompt ?? row.agent_prompt},
+                  actief = ${body.actief ?? row.actief},
+                  sort_order = ${body.sortOrder ?? row.sort_order},
+                  updated_at = now()
+                WHERE id = ${body.id}
+              `
+              const updated = await sql`
+                SELECT id, label, hint, agent_prompt, sort_order, actief
+                FROM beslag_defs WHERE id = ${body.id} LIMIT 1
+              `
+              sendJson(res, 200, {
+                beslag: mapBeslag(
+                  (updated as Array<Parameters<typeof mapBeslag>[0]>)[0]!,
+                ),
+              })
+              return
+            }
+
+            if (req.method === 'POST') {
+              const body = (await readJsonBody(req)) as {
+                id?: string
+                label?: string
+                hint?: string
+                agentPrompt?: string
+                sortOrder?: number
+              }
+              const id = (body.id || body.label || '')
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9-]+/g, '-')
+                .replace(/^-|-$/g, '')
+              if (!id || !body.label?.trim()) {
+                sendJson(res, 400, { error: 'id en label zijn verplicht' })
+                return
+              }
+              await sql`
+                INSERT INTO beslag_defs (id, label, hint, agent_prompt, sort_order, actief, updated_at)
+                VALUES (
+                  ${id}, ${body.label.trim()}, ${body.hint ?? ''},
+                  ${body.agentPrompt ?? ''}, ${body.sortOrder ?? 100}, true, now()
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                  label = EXCLUDED.label,
+                  hint = EXCLUDED.hint,
+                  agent_prompt = EXCLUDED.agent_prompt,
+                  sort_order = EXCLUDED.sort_order,
+                  updated_at = now()
+              `
+              const rows = await sql`
+                SELECT id, label, hint, agent_prompt, sort_order, actief
+                FROM beslag_defs WHERE id = ${id} LIMIT 1
+              `
+              sendJson(res, 200, {
+                beslag: mapBeslag(
+                  (rows as Array<Parameters<typeof mapBeslag>[0]>)[0]!,
+                ),
+              })
+              return
+            }
+
+            sendJson(res, 405, { error: 'Method not allowed' })
+            return
+          }
+
+          if (pathname === '/api/admin-collecties') {
+            if (!isAuthed(req, root)) {
+              sendJson(res, 401, { error: 'Niet ingelogd' })
+              return
+            }
+            const { neon } = await import('@neondatabase/serverless')
+            if (!process.env.DATABASE_URL) {
+              for (const name of ['.env.local', '.env']) {
+                const p = resolve(root, name)
+                if (!existsSync(p)) continue
+                for (const line of readFileSync(p, 'utf8').split('\n')) {
+                  const m = /^(DATABASE_URL)=(.*)$/.exec(line.trim())
+                  if (!m || process.env[m[1]!]) continue
+                  process.env[m[1]!] = m[2]!
+                    .trim()
+                    .replace(/^["']|["']$/g, '')
+                }
+              }
+            }
+            if (!process.env.DATABASE_URL) {
+              sendJson(res, 500, { error: 'DATABASE_URL ontbreekt' })
+              return
+            }
+            try {
+              const sql = neon(process.env.DATABASE_URL)
+              await sql`
+                CREATE TABLE IF NOT EXISTS collectie_defaults (
+                  collectie TEXT PRIMARY KEY,
+                  beslag_id TEXT,
+                  agent_extra TEXT NOT NULL DEFAULT '',
+                  montagetypes JSONB NOT NULL DEFAULT '[]'::jsonb,
+                  kleur_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+              `
+              await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS montagetypes JSONB NOT NULL DEFAULT '[]'::jsonb`
+              await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS kleur_ids JSONB NOT NULL DEFAULT '[]'::jsonb`
+
+              const parseArr = (value: unknown): string[] => {
+                if (Array.isArray(value)) return value.map(String)
+                if (typeof value === 'string') {
+                  try {
+                    const parsed = JSON.parse(value) as unknown
+                    return Array.isArray(parsed) ? parsed.map(String) : []
+                  } catch {
+                    return []
+                  }
+                }
+                return []
+              }
+
+              if (req.method === 'GET') {
+                const productCollecties = await sql`
+                  SELECT DISTINCT collectie FROM producten
+                  WHERE collectie IS NOT NULL AND trim(collectie) <> ''
+                `
+                for (const row of productCollecties as Array<{ collectie: string }>) {
+                  const name = row.collectie.trim()
+                  if (!name) continue
+                  await sql`
+                    INSERT INTO collectie_defaults (collectie, beslag_id, agent_extra, montagetypes, kleur_ids, updated_at)
+                    VALUES (${name}, NULL, '', '[]'::jsonb, '[]'::jsonb, now())
+                    ON CONFLICT (collectie) DO NOTHING
+                  `
+                }
+                const rows = await sql`
+                  SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids
+                  FROM collectie_defaults ORDER BY collectie ASC
+                `
+                sendJson(res, 200, {
+                  collecties: (
+                    rows as Array<{
+                      collectie: string
+                      beslag_id: string | null
+                      agent_extra: string
+                      montagetypes: unknown
+                      kleur_ids: unknown
+                    }>
+                  ).map((r) => ({
+                    collectie: r.collectie,
+                    beslagId: r.beslag_id,
+                    agentExtra: r.agent_extra ?? '',
+                    montagetypes: parseArr(r.montagetypes),
+                    kleurIds: parseArr(r.kleur_ids),
+                  })),
+                })
+                return
+              }
+
+              if (req.method === 'PATCH') {
+                const body = (await readJsonBody(req)) as {
+                  collectie?: string
+                  beslagId?: string | null
+                  agentExtra?: string
+                  montagetypes?: string[]
+                  kleurIds?: string[]
+                  applyToProducts?: boolean
+                }
+                const collectie = body.collectie?.trim()
+                if (!collectie) {
+                  sendJson(res, 400, { error: 'collectie is verplicht' })
+                  return
+                }
+                const existing = await sql`
+                  SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids
+                  FROM collectie_defaults WHERE collectie = ${collectie} LIMIT 1
+                `
+                const cur = (
+                  existing as Array<{
+                    beslag_id: string | null
+                    agent_extra: string
+                    montagetypes: unknown
+                    kleur_ids: unknown
+                  }>
+                )[0]
+                const beslagId =
+                  body.beslagId !== undefined
+                    ? body.beslagId
+                    : (cur?.beslag_id ?? null)
+                const agentExtra =
+                  body.agentExtra !== undefined
+                    ? body.agentExtra
+                    : (cur?.agent_extra ?? '')
+                const montagetypes =
+                  body.montagetypes !== undefined
+                    ? body.montagetypes.map(String)
+                    : parseArr(cur?.montagetypes)
+                const kleurIds =
+                  body.kleurIds !== undefined
+                    ? body.kleurIds.map(String)
+                    : parseArr(cur?.kleur_ids)
+
+                await sql`
+                  INSERT INTO collectie_defaults (
+                    collectie, beslag_id, agent_extra, montagetypes, kleur_ids, updated_at
+                  ) VALUES (
+                    ${collectie}, ${beslagId}, ${agentExtra},
+                    ${JSON.stringify(montagetypes)}::jsonb,
+                    ${JSON.stringify(kleurIds)}::jsonb,
+                    now()
+                  )
+                  ON CONFLICT (collectie) DO UPDATE SET
+                    beslag_id = EXCLUDED.beslag_id,
+                    agent_extra = EXCLUDED.agent_extra,
+                    montagetypes = EXCLUDED.montagetypes,
+                    kleur_ids = EXCLUDED.kleur_ids,
+                    updated_at = now()
+                `
+
+                let productsUpdated = 0
+                if (body.applyToProducts) {
+                  const productRows = await sql`
+                    SELECT id, montagetypes, kleur_ids, beslag_id, agent_extra, montagetype
+                    FROM producten WHERE collectie = ${collectie}
+                  `
+                  for (const p of productRows as Array<{
+                    id: string
+                    montagetypes: unknown
+                    kleur_ids: unknown
+                    beslag_id: string | null
+                    agent_extra: string | null
+                    montagetype: string
+                  }>) {
+                    const nextTypes =
+                      montagetypes.length > 0
+                        ? montagetypes
+                        : parseArr(p.montagetypes)
+                    const nextPrimary = nextTypes[0] ?? p.montagetype
+                    const nextKleuren =
+                      kleurIds.length > 0 ? kleurIds : parseArr(p.kleur_ids)
+                    const nextBeslag = beslagId ?? p.beslag_id
+                    const nextExtra =
+                      agentExtra.trim() !== ''
+                        ? agentExtra
+                        : (p.agent_extra ?? '')
+                    await sql`
+                      UPDATE producten SET
+                        montagetypes = ${JSON.stringify(nextTypes)}::jsonb,
+                        montagetype = ${nextPrimary},
+                        kleur_ids = ${JSON.stringify(nextKleuren)}::jsonb,
+                        beslag_id = ${nextBeslag},
+                        agent_extra = ${nextExtra},
+                        updated_at = now()
+                      WHERE id = ${p.id}
+                    `
+                    productsUpdated += 1
+                  }
+                }
+
+                sendJson(res, 200, {
+                  collectie: {
+                    collectie,
+                    beslagId,
+                    agentExtra,
+                    montagetypes,
+                    kleurIds,
+                  },
+                  productsUpdated,
+                })
+                return
+              }
+
+              sendJson(res, 405, { error: 'Method not allowed' })
+            } catch (err) {
+              sendJson(res, 500, {
+                error:
+                  err instanceof Error
+                    ? err.message
+                    : 'Collecties laden mislukt',
+              })
+            }
+            return
+          }
+
+          if (pathname === '/api/admin-mail') {
+            if (!isAuthed(req, root)) {
+              sendJson(res, 401, { error: 'Niet ingelogd' })
+              return
+            }
+            if (!process.env.DATABASE_URL) {
+              for (const name of ['.env.local', '.env']) {
+                const p = resolve(root, name)
+                if (!existsSync(p)) continue
+                for (const line of readFileSync(p, 'utf8').split('\n')) {
+                  const m =
+                    /^(DATABASE_URL|MAILJET_API_KEY|MAILJET_API_SECRET|MAIL_FROM|LEADS_EMAIL)=(.*)$/.exec(
+                      line.trim(),
+                    )
+                  if (!m || process.env[m[1]!]) continue
+                  process.env[m[1]!] = m[2]!
+                    .trim()
+                    .replace(/^["']|["']$/g, '')
+                }
+              }
+            }
+            try {
+              if (req.method === 'GET') {
+                const templates = await loadMailTemplates()
+                sendJson(res, 200, {
+                  templates,
+                  placeholders: MAIL_PLACEHOLDERS,
+                  bijlagen: {
+                    klant: ['visualisatie (resultaatbeeld)'],
+                    leads: [
+                      'visualisatie (resultaatbeeld)',
+                      'originele kamerfoto van de klant',
+                    ],
+                  },
+                  velden: [
+                    'naam',
+                    'woonplaats',
+                    'e-mailadres',
+                    'product',
+                    'kleur',
+                    'montagetype',
+                    'prijsindicatie (ja/nee)',
+                    'bron (mail of offerte)',
+                  ],
+                  privacy:
+                    'Klantgegevens worden niet bewaard in de database; ze gaan alleen mee in de verstuurde e-mails.',
+                })
+                return
+              }
+              if (req.method === 'PATCH') {
+                const body = (await readJsonBody(req)) as {
+                  id?: 'klant' | 'leads'
+                  label?: string
+                  subject?: string
+                  html?: string
+                }
+                if (body.id !== 'klant' && body.id !== 'leads') {
+                  sendJson(res, 400, { error: 'id moet klant of leads zijn' })
+                  return
+                }
+                const template = await saveMailTemplate({
+                  id: body.id,
+                  label: body.label,
+                  subject: body.subject,
+                  html: body.html,
+                })
+                sendJson(res, 200, { template })
+                return
+              }
+              sendJson(res, 405, { error: 'Method not allowed' })
+            } catch (err) {
+              sendJson(res, 500, {
+                error:
+                  err instanceof Error
+                    ? err.message
+                    : 'Mail-templates laden mislukt',
+              })
+            }
+            return
+          }
+
+          if (pathname === '/api/mail-resultaat') {
+            if (req.method !== 'POST') {
+              sendJson(res, 405, { error: 'Alleen POST is toegestaan.' })
+              return
+            }
+            try {
+              const body = (await readJsonBody(req)) as {
+                naam?: string
+                woonplaats?: string
+                email?: string
+                prijsindicatie?: boolean
+                bron?: 'mail' | 'offerte'
+                productId?: string
+                productNaam?: string
+                kleur?: string
+                montagetype?: string
+                imageBase64?: string
+                mimeType?: string
+                roomImageBase64?: string
+                roomMimeType?: string
+              }
+              if (
+                !process.env.DATABASE_URL ||
+                !process.env.MAILJET_API_KEY ||
+                !process.env.MAILJET_API_SECRET
+              ) {
+                for (const name of ['.env.local', '.env']) {
+                  const p = resolve(root, name)
+                  if (!existsSync(p)) continue
+                  for (const line of readFileSync(p, 'utf8').split('\n')) {
+                    const m =
+                      /^(DATABASE_URL|MAILJET_API_KEY|MAILJET_API_SECRET|MAIL_FROM|LEADS_EMAIL)=(.*)$/.exec(
+                        line.trim(),
+                      )
+                    if (!m || process.env[m[1]!]) continue
+                    process.env[m[1]!] = m[2]!
+                      .trim()
+                      .replace(/^["']|["']$/g, '')
+                  }
+                }
+              }
+              const result = await processMailResultaat({
+                naam: body.naam ?? '',
+                woonplaats: body.woonplaats ?? '',
+                email: body.email ?? '',
+                prijsindicatie: Boolean(body.prijsindicatie),
+                bron: body.bron === 'offerte' ? 'offerte' : 'mail',
+                productId: body.productId,
+                productNaam: body.productNaam ?? '',
+                kleur: body.kleur ?? '',
+                montagetype: body.montagetype,
+                imageBase64: body.imageBase64 ?? '',
+                mimeType: body.mimeType,
+                roomImageBase64: body.roomImageBase64,
+                roomMimeType: body.roomMimeType,
+              })
+              sendJson(res, 200, result)
+            } catch (err) {
+              const message =
+                err instanceof Error ? err.message : 'Mail-aanvraag mislukt'
+              const status =
+                message.includes('Ongeldig') ||
+                message.includes('Ontbrekende') ||
+                message.includes('verplicht')
+                  ? 400
+                  : 500
+              sendJson(res, status, { error: message })
+            }
             return
           }
 

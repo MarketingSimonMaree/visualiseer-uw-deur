@@ -46,6 +46,8 @@ type DbRow = {
   collectie: string
   kleuren: unknown
   kleur_ids: unknown
+  beslag_id?: string | null
+  agent_extra?: string | null
   actief: boolean
   updated_at: string | Date | null
 }
@@ -93,6 +95,8 @@ function mapAdmin(row: DbRow) {
     collectie: row.collectie,
     kleuren: legacy,
     kleurIds: kleurIds.length > 0 ? kleurIds : legacy,
+    beslagId: row.beslag_id ?? null,
+    agentExtra: row.agent_extra ?? '',
     actief: row.actief !== false,
     updatedAt: row.updated_at ? String(row.updated_at) : null,
   }
@@ -116,7 +120,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       const rows = await sql`
         SELECT id, naam, afbeelding_url, pagina_url, montagetype, montagetypes,
-               materiaal, collectie, kleuren, kleur_ids, actief, updated_at
+               materiaal, collectie, kleuren, kleur_ids, beslag_id, agent_extra,
+               actief, updated_at
         FROM producten
         ORDER BY actief DESC, collectie ASC, naam ASC
       `
@@ -137,7 +142,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (req.method === 'PATCH') {
         const existing = await sql`
           SELECT id, naam, afbeelding_url, pagina_url, montagetype, montagetypes,
-                 materiaal, collectie, kleuren, kleur_ids, actief, updated_at
+                 materiaal, collectie, kleuren, kleur_ids, beslag_id, agent_extra,
+                 actief, updated_at
           FROM producten WHERE id = ${id} LIMIT 1
         `
         const row = (existing as DbRow[])[0]
@@ -153,6 +159,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body.materiaal = body.materiaal ?? mapped.materiaal
         body.collectie = body.collectie ?? mapped.collectie
         body.kleurIds = body.kleurIds ?? mapped.kleurIds
+        body.beslagId = body.beslagId ?? mapped.beslagId
+        body.agentExtra = body.agentExtra ?? mapped.agentExtra
         body.actief = body.actief ?? mapped.actief
       }
 
@@ -180,17 +188,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : Array.isArray(body.kleuren)
           ? body.kleuren.map(String)
           : []
+      const beslagId =
+        body.beslagId === null || body.beslagId === ''
+          ? null
+          : String(body.beslagId ?? '') || null
+      const agentExtra = String(body.agentExtra ?? '')
       const actief = body.actief !== false
       const primary = montagetypes[0]!
 
       await sql`
         INSERT INTO producten (
           id, naam, afbeelding_url, pagina_url,
-          montagetype, montagetypes, materiaal, collectie, kleuren, kleur_ids, actief, updated_at
+          montagetype, montagetypes, materiaal, collectie, kleuren, kleur_ids,
+          beslag_id, agent_extra, actief, updated_at
         ) VALUES (
           ${id}, ${naam}, ${afbeeldingUrl}, ${paginaUrl},
           ${primary}, ${JSON.stringify(montagetypes)}::jsonb, ${materiaal}, ${collectie},
-          ${JSON.stringify(kleurIds)}::jsonb, ${JSON.stringify(kleurIds)}::jsonb, ${actief}, now()
+          ${JSON.stringify(kleurIds)}::jsonb, ${JSON.stringify(kleurIds)}::jsonb,
+          ${beslagId}, ${agentExtra}, ${actief}, now()
         )
         ON CONFLICT (id) DO UPDATE SET
           naam = EXCLUDED.naam,
@@ -202,13 +217,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           collectie = EXCLUDED.collectie,
           kleuren = EXCLUDED.kleuren,
           kleur_ids = EXCLUDED.kleur_ids,
+          beslag_id = EXCLUDED.beslag_id,
+          agent_extra = EXCLUDED.agent_extra,
           actief = EXCLUDED.actief,
           updated_at = now()
       `
 
       const rows = await sql`
         SELECT id, naam, afbeelding_url, pagina_url, montagetype, montagetypes,
-               materiaal, collectie, kleuren, kleur_ids, actief, updated_at
+               materiaal, collectie, kleuren, kleur_ids, beslag_id, agent_extra,
+               actief, updated_at
         FROM producten WHERE id = ${id} LIMIT 1
       `
       res.status(200).json({ product: mapAdmin((rows as DbRow[])[0]!) })

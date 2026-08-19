@@ -17,6 +17,7 @@ export type GenBody = {
   productNaam: string
   kleur: string
   montagetype: string
+  productId?: string
   cacheKey?: string
 }
 
@@ -232,8 +233,81 @@ export async function runGeneration(
 
   const montagetype = (body.montagetype ||
     'deur-bestaand-kozijn') as Montagetype
-  const montageAgentPrompt =
+  let montageAgentPrompt =
     DEFAULT_AGENT_PROMPTS[montagetype] ?? `Mounting type: ${montagetype}.`
+  let beslagAgentPrompt: string | undefined
+  let agentExtra: string | undefined
+
+  const databaseUrl = process.env.DATABASE_URL?.trim()
+  if (databaseUrl) {
+    try {
+      const { neon } = await import('@neondatabase/serverless')
+      const sql = neon(databaseUrl)
+
+      const montageRows = await sql`
+        SELECT agent_prompt FROM montagetype_defs
+        WHERE id = ${montagetype} AND actief = true
+        LIMIT 1
+      `
+      const fromDb = (montageRows as Array<{ agent_prompt: string }>)[0]
+        ?.agent_prompt?.trim()
+      if (fromDb) montageAgentPrompt = fromDb
+
+      let beslagId: string | null = null
+      let extra = ''
+      let collectie = ''
+
+      if (body.productId) {
+        const prodRows = await sql`
+          SELECT beslag_id, agent_extra, collectie
+          FROM producten WHERE id = ${body.productId} LIMIT 1
+        `
+        const p = (
+          prodRows as Array<{
+            beslag_id: string | null
+            agent_extra: string | null
+            collectie: string | null
+          }>
+        )[0]
+        if (p) {
+          beslagId = p.beslag_id
+          extra = p.agent_extra?.trim() || ''
+          collectie = p.collectie?.trim() || ''
+        }
+      }
+
+      if (!beslagId && collectie) {
+        const colRows = await sql`
+          SELECT beslag_id, agent_extra
+          FROM collectie_defaults WHERE collectie = ${collectie} LIMIT 1
+        `
+        const c = (
+          colRows as Array<{
+            beslag_id: string | null
+            agent_extra: string | null
+          }>
+        )[0]
+        if (c) {
+          beslagId = c.beslag_id
+          if (!extra) extra = c.agent_extra?.trim() || ''
+        }
+      }
+
+      if (!beslagId) beslagId = 'deurkruk-standaard'
+
+      const beslagRows = await sql`
+        SELECT agent_prompt FROM beslag_defs
+        WHERE id = ${beslagId} AND actief = true
+        LIMIT 1
+      `
+      beslagAgentPrompt = (
+        beslagRows as Array<{ agent_prompt: string }>
+      )[0]?.agent_prompt?.trim()
+      agentExtra = extra || undefined
+    } catch {
+      // fallback op defaults hierboven
+    }
+  }
 
   const result = await openai.images.edit({
     model: 'gpt-image-2',
@@ -243,6 +317,8 @@ export async function runGeneration(
       kleur: body.kleur,
       montagetype,
       montageAgentPrompt,
+      beslagAgentPrompt,
+      agentExtra,
     }),
     size: IMAGE_SIZE,
     quality: IMAGE_QUALITY,

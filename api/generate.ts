@@ -17,6 +17,7 @@ const IMAGE_QUALITY = 'low' as const
 type GenBody = {
   roomImageBase64?: string
   productImageUrl?: string
+  productId?: string
   productNaam?: string
   kleur?: string
   montagetype?: string
@@ -59,27 +60,93 @@ function stripDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
   return { mime: m[1], buffer: Buffer.from(m[2], 'base64') }
 }
 
-async function resolveMontagePrompt(montagetype: string): Promise<string> {
+async function resolveAgentGuidance(opts: {
+  montagetype: string
+  productId?: string
+  collectieHint?: string
+}): Promise<{ montage: string; beslag: string; extra: string }> {
+  const fallbackMontage = `Mounting type: ${opts.montagetype}.`
+  const fallbackBeslag =
+    'Hardware: use a standard Dutch lever door handle (deurkruk). NEVER a vertical pull bar unless explicitly required.'
   const databaseUrl = process.env.DATABASE_URL?.trim()
-  if (!databaseUrl) return `Mounting type: ${montagetype}.`
+  if (!databaseUrl) {
+    return { montage: fallbackMontage, beslag: fallbackBeslag, extra: '' }
+  }
+
   try {
     const { neon } = await import('@neondatabase/serverless')
     const sql = neon(databaseUrl)
-    const rows = await sql`
+
+    const montageRows = await sql`
       SELECT agent_prompt FROM montagetype_defs
-      WHERE id = ${montagetype} AND actief = true
+      WHERE id = ${opts.montagetype} AND actief = true
       LIMIT 1
     `
-    const prompt = (rows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim()
-    return prompt || `Mounting type: ${montagetype}.`
+    const montage =
+      (montageRows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim() ||
+      fallbackMontage
+
+    let beslagId: string | null = null
+    let agentExtra = ''
+    let collectie = opts.collectieHint ?? ''
+
+    if (opts.productId) {
+      const productRows = await sql`
+        SELECT beslag_id, agent_extra, collectie
+        FROM producten
+        WHERE id = ${opts.productId}
+        LIMIT 1
+      `
+      const p = (
+        productRows as Array<{
+          beslag_id: string | null
+          agent_extra: string | null
+          collectie: string
+        }>
+      )[0]
+      if (p) {
+        beslagId = p.beslag_id
+        agentExtra = p.agent_extra?.trim() || ''
+        collectie = p.collectie || collectie
+      }
+    }
+
+    if (!beslagId && collectie) {
+      const colRows = await sql`
+        SELECT beslag_id, agent_extra
+        FROM collectie_defaults
+        WHERE collectie = ${collectie}
+        LIMIT 1
+      `
+      const c = (
+        colRows as Array<{ beslag_id: string | null; agent_extra: string | null }>
+      )[0]
+      if (c) {
+        beslagId = c.beslag_id
+        if (!agentExtra) agentExtra = c.agent_extra?.trim() || ''
+      }
+    }
+
+    if (!beslagId) beslagId = 'deurkruk-standaard'
+
+    const beslagRows = await sql`
+      SELECT agent_prompt FROM beslag_defs
+      WHERE id = ${beslagId} AND actief = true
+      LIMIT 1
+    `
+    const beslag =
+      (beslagRows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim() ||
+      fallbackBeslag
+
+    return { montage, beslag, extra: agentExtra }
   } catch {
-    return `Mounting type: ${montagetype}.`
+    return { montage: fallbackMontage, beslag: fallbackBeslag, extra: '' }
   }
 }
 
 function buildPrompt(
   body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'montagetype'>>,
-  montageAgentPrompt: string,
+  guidance: { montage: string; beslag: string; extra: string },
 ) {
   return [
     'Photorealistic photo edit of a real room.',
@@ -88,16 +155,19 @@ function buildPrompt(
     'Replace only the door leaf (and frame only if mounting type requires a new frame) so it fits the existing opening naturally.',
     `Door model: ${body.productNaam}.`,
     `Requested colour: ${body.kleur}. Apply this colour to the door leaf/frame realistically; keep panel/glass layout of the model.`,
-    `Mounting guidance: ${montageAgentPrompt}`,
+    `Mounting guidance: ${guidance.montage}`,
+    `Hardware guidance: ${guidance.beslag}`,
+    guidance.extra ? `Additional product guidance: ${guidance.extra}` : '',
     'HARD RULES — these override anything visible in the product reference photo:',
     '1. The door must be FULLY CLOSED, flush in the opening. Never ajar, never open, never swinging.',
-    '2. Hardware: ALWAYS a standard Dutch lever door handle (deurkruk / horizontal lever on a rose or shield). NEVER a vertical pull bar, long stang, ladder pull, or handle bar.',
-    '3. HINGE vs HANDLE (critical): Keep the hinge side exactly as in Image 1 (the room photo). Put the deurkruk ALWAYS on the OPPOSITE side of the hinges — never on the hinge side. Example: if hinges are on the left of the opening, the deurkruk must be on the right; if hinges are on the right, the deurkruk must be on the left. Ignore the handle side shown on the product photo.',
-    '4. Any glass in the door must be CLEAR and TRANSPARENT (see-through). Never frosted, sandblasted, milky, smoked-opaque, or privacy glass.',
-    '5. From Image 2, copy only the door design: proportions, panels, frame profile, and material look. Ignore its open/closed state, ignore its handle type and handle side, ignore frosted glass.',
+    '2. HINGE vs HANDLE SIDE (critical): Keep the hinge side exactly as in Image 1. Put operable hardware ALWAYS on the OPPOSITE side of the hinges. Ignore the handle side shown on the product photo.',
+    '3. Any glass in the door must be CLEAR and TRANSPARENT (see-through). Never frosted, sandblasted, milky, smoked-opaque, or privacy glass.',
+    '4. From Image 2, copy only the door design: proportions, panels, frame profile, and material look. Ignore its open/closed state and frosted glass. Follow the hardware guidance above for handle/pull type.',
     'No people, no text overlays, no logos, no watermarks.',
     'Output one photorealistic photo.',
-  ].join(' ')
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function errorMessage(err: unknown): string {
@@ -167,7 +237,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const productFile = await toFile(productBuf, 'door.jpg', { type: productMime })
 
     const montagetype = body.montagetype || 'deur-bestaand-kozijn'
-    const montageAgentPrompt = await resolveMontagePrompt(montagetype)
+    const guidance = await resolveAgentGuidance({
+      montagetype,
+      productId: body.productId,
+    })
 
     const result = await openai.images.edit({
       model: 'gpt-image-2',
@@ -178,7 +251,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           kleur: body.kleur,
           montagetype,
         },
-        montageAgentPrompt,
+        guidance,
       ),
       size: IMAGE_SIZE,
       quality: IMAGE_QUALITY,

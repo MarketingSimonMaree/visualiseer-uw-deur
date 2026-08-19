@@ -11,6 +11,8 @@ export type AdminProduct = Product & {
   actief: boolean
   updatedAt: string | null
   kleurIds: string[]
+  beslagId?: string | null
+  agentExtra?: string
 }
 
 export type ProductInput = {
@@ -22,7 +24,26 @@ export type ProductInput = {
   materiaal: Materiaal | string
   collectie: string
   kleurIds: string[]
+  beslagId?: string | null
+  agentExtra?: string
   actief?: boolean
+}
+
+export type AdminBeslag = {
+  id: string
+  label: string
+  hint: string
+  agentPrompt: string
+  sortOrder: number
+  actief: boolean
+}
+
+export type CollectieDefault = {
+  collectie: string
+  beslagId: string | null
+  agentExtra: string
+  montagetypes: string[]
+  kleurIds: string[]
 }
 
 export type AdminKleur = KleurOptie & {
@@ -160,4 +181,92 @@ export async function saveAdminKleur(
     body: JSON.stringify(input),
   })
   return data.kleur
+}
+
+export async function fetchAdminBeslag(): Promise<{
+  beslag: AdminBeslag[]
+  collectieDefaults: CollectieDefault[]
+}> {
+  return adminFetch('/api/admin-beslag')
+}
+
+export async function patchAdminBeslag(
+  input: Partial<AdminBeslag> & { id: string },
+): Promise<AdminBeslag> {
+  const data = await adminFetch<{ beslag: AdminBeslag }>('/api/admin-beslag', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+  return data.beslag
+}
+
+export async function createAdminBeslag(
+  input: Partial<AdminBeslag> & { label: string },
+): Promise<AdminBeslag> {
+  const data = await adminFetch<{ beslag: AdminBeslag }>('/api/admin-beslag', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  return data.beslag
+}
+
+export async function patchCollectieDefault(
+  input: CollectieDefault,
+): Promise<CollectieDefault> {
+  const data = await adminFetch<{ collectieDefault: CollectieDefault }>(
+    '/api/admin-beslag',
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ kind: 'collectie', ...input }),
+    },
+  )
+  return data.collectieDefault
+}
+
+export async function fetchAdminCollecties(): Promise<CollectieDefault[]> {
+  const data = await adminFetch<{ collecties: CollectieDefault[] }>(
+    '/api/admin-collecties',
+  )
+  return data.collecties
+}
+
+export async function saveAdminCollectie(
+  input: CollectieDefault & { applyToProducts?: boolean },
+): Promise<{ collectie: CollectieDefault; productsUpdated: number }> {
+  return adminFetch('/api/admin-collecties', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export type AdminMailTemplate = {
+  id: 'klant' | 'leads'
+  label: string
+  subject: string
+  html: string
+}
+
+export type AdminMailMeta = {
+  templates: AdminMailTemplate[]
+  placeholders: Array<{ key: string; beschrijving: string }>
+  bijlagen: { klant: string[]; leads: string[] }
+  velden: string[]
+  privacy: string
+}
+
+export async function fetchAdminMail(): Promise<AdminMailMeta> {
+  return adminFetch('/api/admin-mail')
+}
+
+export async function patchAdminMailTemplate(
+  input: Partial<AdminMailTemplate> & { id: 'klant' | 'leads' },
+): Promise<AdminMailTemplate> {
+  const data = await adminFetch<{ template: AdminMailTemplate }>(
+    '/api/admin-mail',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    },
+  )
+  return data.template
 }

@@ -79,19 +79,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]),
     )
 
+    // Collectie-defaults als fallback als product geen types/kleuren heeft
+    let collectieDefaults = new Map<
+      string,
+      { montagetypes: string[]; kleurIds: string[] }
+    >()
+    try {
+      const colRows = await sql`
+        SELECT collectie, montagetypes, kleur_ids FROM collectie_defaults
+      `
+      collectieDefaults = new Map(
+        (
+          colRows as Array<{
+            collectie: string
+            montagetypes: unknown
+            kleur_ids: unknown
+          }>
+        ).map((r) => [
+          r.collectie,
+          {
+            montagetypes: parseArray(r.montagetypes),
+            kleurIds: parseArray(r.kleur_ids),
+          },
+        ]),
+      )
+    } catch {
+      // tabel/kolommen ontbreken nog — genegeerd
+    }
+
     const producten = (rows as DbProduct[])
       .map((row) => {
-        const montagetypes = parseArray(row.montagetypes)
-        const types =
-          montagetypes.length > 0
-            ? montagetypes
-            : row.montagetype
-              ? [row.montagetype]
-              : []
-        const kleurIds = parseArray(row.kleur_ids)
+        const def = collectieDefaults.get(row.collectie)
+        let montagetypes = parseArray(row.montagetypes)
+        if (montagetypes.length === 0 && row.montagetype) {
+          montagetypes = [row.montagetype]
+        }
+        if (montagetypes.length === 0 && def?.montagetypes.length) {
+          montagetypes = def.montagetypes
+        }
+        let kleurIds = parseArray(row.kleur_ids)
         const legacy = parseArray(row.kleuren)
-        const ids = kleurIds.length > 0 ? kleurIds : legacy.map((n) => n)
-        const kleuren = ids.map((id) => {
+        if (kleurIds.length === 0 && legacy.length) kleurIds = legacy
+        if (kleurIds.length === 0 && def?.kleurIds.length) {
+          kleurIds = def.kleurIds
+        }
+        const kleuren = kleurIds.map((id) => {
           const found = kleurMap.get(id)
           if (found) return found
           return {
@@ -106,8 +138,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           id: row.id,
           naam: row.naam,
           afbeeldingUrl: row.afbeelding_url,
-          montagetype: (types[0] || row.montagetype) as string,
-          montagetypes: types,
+          montagetype: (montagetypes[0] || row.montagetype) as string,
+          montagetypes,
           materiaal: row.materiaal,
           collectie: row.collectie,
           kleuren,

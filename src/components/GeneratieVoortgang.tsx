@@ -5,6 +5,7 @@ interface Props {
   product: Product
   kleur: string
   roomPreviewUrl: string
+  forMail?: boolean
 }
 
 const TIPS = [
@@ -14,7 +15,12 @@ const TIPS = [
   'Bijna klaar — even geduld…',
 ]
 
-export function GeneratieVoortgang({ product, kleur, roomPreviewUrl }: Props) {
+export function GeneratieVoortgang({
+  product,
+  kleur,
+  roomPreviewUrl,
+  forMail,
+}: Props) {
   const [tipIndex, setTipIndex] = useState(0)
 
   useEffect(() => {
@@ -31,8 +37,9 @@ export function GeneratieVoortgang({ product, kleur, roomPreviewUrl }: Props) {
           <span className="gold">Bezig</span> met uw visualisatie
         </h1>
         <p className="lead">
-          Dit duurt meestal 15–30 seconden. Uw foto en gekozen deur blijven
-          zichtbaar.
+          {forMail
+            ? 'Dit duurt meestal 15–30 seconden. Daarna sturen wij het resultaat naar uw e-mail.'
+            : 'Dit duurt meestal 15–30 seconden. Uw foto en gekozen deur blijven zichtbaar.'}
         </p>
       </div>
 

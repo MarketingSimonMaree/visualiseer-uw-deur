@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { OFFERTE_URL } from '../config'
+import { OfferteDialog } from './OfferteDialog'
 import { downloadResultaat } from '../lib/download'
 import type { GeneratieResultaat, Product } from '../types/product'
 import { ResultaatStrip } from './ResultaatStrip'
+import type { KlantGegevens } from './KlantGegevensForm'
 
 interface Props {
   resultaat: GeneratieResultaat
@@ -11,6 +12,7 @@ interface Props {
   onSelectResultaat: (id: string) => void
   onRetry: () => void
   onAndereDeur: () => void
+  onOfferte: (data: KlantGegevens) => Promise<void>
   mock?: boolean
 }
 
@@ -21,10 +23,12 @@ export function ResultaatView({
   onSelectResultaat,
   onRetry,
   onAndereDeur,
+  onOfferte,
   mock,
 }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showOfferte, setShowOfferte] = useState(false)
 
   async function handleDownload() {
     setError(null)
@@ -84,17 +88,16 @@ export function ResultaatView({
               →
             </span>
           </button>
-          <a
+          <button
+            type="button"
             className="btn btn-secondary"
-            href={OFFERTE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={() => setShowOfferte(true)}
           >
             Offerte
             <span className="btn-arrow" aria-hidden>
               →
             </span>
-          </a>
+          </button>
           <button type="button" className="choice-card !w-auto !py-3" onClick={onRetry}>
             Opnieuw proberen
           </button>
@@ -114,6 +117,13 @@ export function ResultaatView({
         activeId={resultaat.id}
         onSelect={onSelectResultaat}
       />
+
+      {showOfferte && (
+        <OfferteDialog
+          onCancel={() => setShowOfferte(false)}
+          onSubmit={onOfferte}
+        />
+      )}
     </div>
   )
 }
