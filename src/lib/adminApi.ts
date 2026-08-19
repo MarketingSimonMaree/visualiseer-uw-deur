@@ -19,17 +19,24 @@ export type ProductInput = {
 }
 
 const TOKEN_KEY = 'sm-admin-token'
+const USER_KEY = 'sm-admin-user'
 
 export function getAdminToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY)
 }
 
-export function setAdminToken(token: string) {
+export function getAdminUsername(): string | null {
+  return sessionStorage.getItem(USER_KEY)
+}
+
+export function setAdminToken(token: string, username?: string) {
   sessionStorage.setItem(TOKEN_KEY, token)
+  if (username) sessionStorage.setItem(USER_KEY, username)
 }
 
 export function clearAdminToken() {
   sessionStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(USER_KEY)
 }
 
 async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -47,12 +54,18 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data
 }
 
-export async function adminLogin(password: string): Promise<void> {
-  const data = await adminFetch<{ token: string }>('/api/admin/login', {
-    method: 'POST',
-    body: JSON.stringify({ password }),
-  })
-  setAdminToken(data.token)
+export async function adminLogin(
+  username: string,
+  password: string,
+): Promise<void> {
+  const data = await adminFetch<{ token: string; username: string }>(
+    '/api/admin/login',
+    {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    },
+  )
+  setAdminToken(data.token, data.username)
 }
 
 export async function fetchAdminProducten(): Promise<AdminProduct[]> {

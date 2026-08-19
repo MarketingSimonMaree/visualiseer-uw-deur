@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { neon } from '@neondatabase/serverless'
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
-const DEFAULT_BOOTSTRAP_PASSWORD = 'admin1234'
+const DEFAULT_USER = { username: 'carlton', password: 'admin1234' }
 
 function readEnvFileValue(root: string, key: string): string | undefined {
   for (const name of ['.env.local', '.env']) {
@@ -24,17 +24,15 @@ function loadDatabaseUrl(projectRoot?: string): string | undefined {
   return undefined
 }
 
-/** Bootstrap-wachtwoord uit env; default admin1234 tot je het in beheer wijzigt. */
 export function loadBootstrapPassword(projectRoot?: string): string {
   if (process.env.ADMIN_PASSWORD?.trim()) return process.env.ADMIN_PASSWORD.trim()
   if (projectRoot) {
     const fromFile = readEnvFileValue(projectRoot, 'ADMIN_PASSWORD')
     if (fromFile) return fromFile
   }
-  return DEFAULT_BOOTSTRAP_PASSWORD
+  return DEFAULT_USER.password
 }
 
-/** @deprecated gebruik loadBootstrapPassword */
 export function loadAdminPassword(projectRoot?: string): string | undefined {
   return loadBootstrapPassword(projectRoot)
 }
@@ -45,7 +43,6 @@ export function loadAdminSecret(projectRoot?: string): string {
     const fromFile = readEnvFileValue(projectRoot, 'ADMIN_SECRET')
     if (fromFile) return fromFile
   }
-  // Stabiel gehouden o.b.v. bootstrap, niet o.b.v. DB-wachtwoord (tokens blijven geldig)
   return `sm-admin:${loadBootstrapPassword(projectRoot)}`
 }
 
@@ -73,82 +70,125 @@ export function verifyPasswordHash(
   return safeEqual(next, hash)
 }
 
-export function checkAdminPassword(
-  password: string | undefined,
-  expected: string,
-): boolean {
-  if (!password) return false
-  return safeEqual(password, expected)
+function normalizeUsername(username: string | undefined): string | null {
+  if (!username) return null
+  const cleaned = username.trim().toLowerCase()
+  if (!/^[a-z0-9._-]{2,64}$/.test(cleaned)) return null
+  return cleaned
 }
 
-async function ensureSettingsTable(projectRoot?: string) {
+async function getSql(projectRoot?: string) {
   const databaseUrl = loadDatabaseUrl(projectRoot)
   if (!databaseUrl) throw new Error('DATABASE_URL ontbreekt')
-  const sql = neon(databaseUrl)
+  return neon(databaseUrl)
+}
+
+export async function ensureAdminUsers(projectRoot?: string) {
+  const sql = await getSql(projectRoot)
   await sql`
-    CREATE TABLE IF NOT EXISTS admin_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
+    CREATE TABLE IF NOT EXISTS admin_users (
+      username TEXT PRIMARY KEY,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `
+
+  const existing = await sql`
+    SELECT username FROM admin_users WHERE username = ${DEFAULT_USER.username} LIMIT 1
+  `
+  if ((existing as Array<{ username: string }>).length === 0) {
+    const password =
+      process.env.ADMIN_PASSWORD?.trim() || DEFAULT_USER.password
+    await sql`
+      INSERT INTO admin_users (username, password_hash, updated_at)
+      VALUES (
+        ${DEFAULT_USER.username},
+        ${hashPassword(password)},
+        now()
+      )
+      ON CONFLICT (username) DO NOTHING
+    `
+  }
+
   return sql
 }
 
-async function getStoredPasswordHash(
-  projectRoot?: string,
-): Promise<string | null> {
-  const sql = await ensureSettingsTable(projectRoot)
+export async function loginAdminUser(opts: {
+  username?: string
+  password?: string
+  projectRoot?: string
+}): Promise<{ username: string } | null> {
+  const username = normalizeUsername(opts.username)
+  if (!username || !opts.password) return null
+
+  const sql = await ensureAdminUsers(opts.projectRoot)
   const rows = await sql`
-    SELECT value FROM admin_settings WHERE key = 'password_hash' LIMIT 1
+    SELECT username, password_hash
+    FROM admin_users
+    WHERE username = ${username}
+    LIMIT 1
   `
-  const value = (rows as Array<{ value: string }>)[0]?.value
-  return value ?? null
+  const row = (rows as Array<{ username: string; password_hash: string }>)[0]
+  if (!row) return null
+  if (!verifyPasswordHash(opts.password, row.password_hash)) return null
+  return { username: row.username }
 }
 
+/** Compat: alleen wachtwoord (oude clients) — probeert user carlton. */
 export async function verifyLoginPassword(
   password: string | undefined,
   projectRoot?: string,
 ): Promise<boolean> {
-  if (!password) return false
-  const stored = await getStoredPasswordHash(projectRoot)
-  if (stored) return verifyPasswordHash(password, stored)
-  return checkAdminPassword(password, loadBootstrapPassword(projectRoot))
+  const result = await loginAdminUser({
+    username: DEFAULT_USER.username,
+    password,
+    projectRoot,
+  })
+  return Boolean(result)
 }
 
 export async function changeAdminPassword(opts: {
+  username?: string
   currentPassword: string
   newPassword: string
   projectRoot?: string
 }): Promise<void> {
-  const { currentPassword, newPassword, projectRoot } = opts
-  if (!newPassword || newPassword.length < 6) {
+  const username =
+    normalizeUsername(opts.username) ?? DEFAULT_USER.username
+  if (!opts.newPassword || opts.newPassword.length < 6) {
     throw Object.assign(
       new Error('Nieuw wachtwoord moet minimaal 6 tekens zijn'),
       { statusCode: 400 },
     )
   }
-  const ok = await verifyLoginPassword(currentPassword, projectRoot)
-  if (!ok) {
+
+  const sql = await ensureAdminUsers(opts.projectRoot)
+  const rows = await sql`
+    SELECT username, password_hash
+    FROM admin_users
+    WHERE username = ${username}
+    LIMIT 1
+  `
+  const row = (rows as Array<{ username: string; password_hash: string }>)[0]
+  if (!row || !verifyPasswordHash(opts.currentPassword, row.password_hash)) {
     throw Object.assign(new Error('Huidig wachtwoord is onjuist'), {
       statusCode: 401,
     })
   }
-  const sql = await ensureSettingsTable(projectRoot)
-  const hashed = hashPassword(newPassword)
+
   await sql`
-    INSERT INTO admin_settings (key, value, updated_at)
-    VALUES ('password_hash', ${hashed}, now())
-    ON CONFLICT (key) DO UPDATE SET
-      value = EXCLUDED.value,
-      updated_at = now()
+    UPDATE admin_users
+    SET password_hash = ${hashPassword(opts.newPassword)}, updated_at = now()
+    WHERE username = ${username}
   `
 }
 
-export function createAdminToken(secret: string): string {
+export function createAdminToken(secret: string, username: string): string {
   const exp = Date.now() + TOKEN_TTL_MS
   const nonce = randomBytes(8).toString('hex')
-  const payload = `${exp}.${nonce}`
+  const user = normalizeUsername(username) ?? 'admin'
+  const payload = `${exp}.${nonce}.${user}`
   const sig = createHmac('sha256', secret).update(payload).digest('hex')
   return `${payload}.${sig}`
 }
@@ -156,16 +196,19 @@ export function createAdminToken(secret: string): string {
 export function verifyAdminToken(
   token: string | undefined,
   secret: string,
-): boolean {
-  if (!token) return false
+): { username: string } | null {
+  if (!token) return null
   const parts = token.split('.')
-  if (parts.length !== 3) return false
-  const [exp, nonce, sig] = parts
-  if (!exp || !nonce || !sig) return false
-  if (!Number.isFinite(Number(exp)) || Date.now() > Number(exp)) return false
-  const payload = `${exp}.${nonce}`
+  if (parts.length !== 4) return null
+  const [exp, nonce, username, sig] = parts
+  if (!exp || !nonce || !username || !sig) return null
+  if (!Number.isFinite(Number(exp)) || Date.now() > Number(exp)) return null
+  const payload = `${exp}.${nonce}.${username}`
   const expected = createHmac('sha256', secret).update(payload).digest('hex')
-  return safeEqual(sig, expected)
+  if (!safeEqual(sig, expected)) return null
+  const user = normalizeUsername(username)
+  if (!user) return null
+  return { username: user }
 }
 
 export function bearerToken(

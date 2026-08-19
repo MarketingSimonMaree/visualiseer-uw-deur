@@ -12,9 +12,9 @@ import {
 } from '../../server/productenCore'
 
 function requireAuth(req: VercelRequest): boolean {
-  const secret = loadAdminSecret()
-  if (!secret) return false
-  return verifyAdminToken(bearerToken(req.headers.authorization), secret)
+  return Boolean(
+    verifyAdminToken(bearerToken(req.headers.authorization), loadAdminSecret()),
+  )
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

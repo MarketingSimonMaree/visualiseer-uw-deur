@@ -12,8 +12,8 @@ import {
   changeAdminPassword,
   createAdminToken,
   loadAdminSecret,
+  loginAdminUser,
   verifyAdminToken,
-  verifyLoginPassword,
 } from './adminAuth.ts'
 import {
   listAdminProducten,
@@ -61,12 +61,10 @@ function sendJson(
 function isAuthed(
   req: import('node:http').IncomingMessage,
   root: string,
-): boolean {
-  const secret = loadAdminSecret(root)
-  if (!secret) return false
+): { username: string } | null {
   return verifyAdminToken(
     bearerToken(req.headers.authorization),
-    secret,
+    loadAdminSecret(root),
   )
 }
 
@@ -88,18 +86,31 @@ export function generateApiPlugin(): Plugin {
           }
 
           if (pathname === '/api/admin/login' && req.method === 'POST') {
-            const body = (await readJsonBody(req)) as { password?: string }
-            const ok = await verifyLoginPassword(body.password, root)
-            if (!ok) {
-              sendJson(res, 401, { error: 'Onjuist wachtwoord' })
+            const body = (await readJsonBody(req)) as {
+              username?: string
+              password?: string
+            }
+            const user = await loginAdminUser({
+              username: body.username,
+              password: body.password,
+              projectRoot: root,
+            })
+            if (!user) {
+              sendJson(res, 401, {
+                error: 'Onjuiste gebruikersnaam of wachtwoord',
+              })
               return
             }
-            sendJson(res, 200, { token: createAdminToken(loadAdminSecret(root)) })
+            sendJson(res, 200, {
+              token: createAdminToken(loadAdminSecret(root), user.username),
+              username: user.username,
+            })
             return
           }
 
           if (pathname === '/api/admin/password' && req.method === 'POST') {
-            if (!isAuthed(req, root)) {
+            const session = isAuthed(req, root)
+            if (!session) {
               sendJson(res, 401, { error: 'Niet ingelogd' })
               return
             }
@@ -114,6 +125,7 @@ export function generateApiPlugin(): Plugin {
               return
             }
             await changeAdminPassword({
+              username: session.username,
               currentPassword: body.currentPassword,
               newPassword: body.newPassword,
               projectRoot: root,

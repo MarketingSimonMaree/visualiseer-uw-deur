@@ -12,8 +12,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const secret = loadAdminSecret()
-  if (!verifyAdminToken(bearerToken(req.headers.authorization), secret)) {
+  const session = verifyAdminToken(
+    bearerToken(req.headers.authorization),
+    loadAdminSecret(),
+  )
+  if (!session) {
     res.status(401).json({ error: 'Niet ingelogd' })
     return
   }
@@ -28,6 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     }
     await changeAdminPassword({
+      username: session.username,
       currentPassword: body.currentPassword,
       newPassword: body.newPassword,
     })

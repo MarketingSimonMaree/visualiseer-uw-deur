@@ -5,6 +5,7 @@ import {
   clearAdminToken,
   fetchAdminProducten,
   getAdminToken,
+  getAdminUsername,
   patchAdminProductApi,
   saveAdminProduct,
   type AdminProduct,
@@ -30,9 +31,11 @@ const emptyForm = (): ProductInput => ({
 export default function AdminApp() {
   const [tokenReady, setTokenReady] = useState(false)
   const [authed, setAuthed] = useState(false)
+  const [username, setUsername] = useState('carlton')
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [loggingIn, setLoggingIn] = useState(false)
+  const [loggedInAs, setLoggedInAs] = useState<string | null>(null)
 
   const [producten, setProducten] = useState<AdminProduct[]>([])
   const [loading, setLoading] = useState(false)
@@ -54,6 +57,7 @@ export default function AdminApp() {
 
   useEffect(() => {
     setAuthed(Boolean(getAdminToken()))
+    setLoggedInAs(getAdminUsername())
     setTokenReady(true)
   }, [])
 
@@ -94,8 +98,9 @@ export default function AdminApp() {
     setLoggingIn(true)
     setLoginError(null)
     try {
-      await adminLogin(password)
+      await adminLogin(username, password)
       setPassword('')
+      setLoggedInAs(username.trim().toLowerCase())
       setAuthed(true)
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : 'Inloggen mislukt')
@@ -205,6 +210,17 @@ export default function AdminApp() {
               Beheer van de productcatalogus voor de deurvisualisator.
             </p>
             <label className="mt-6 block text-sm font-medium">
+              Gebruikersnaam
+              <input
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="mt-2 w-full rounded-[var(--inputBorderRadius)] border-2 border-[var(--inputBorderColor)] px-4 py-3"
+                required
+              />
+            </label>
+            <label className="mt-4 block text-sm font-medium">
               Wachtwoord
               <input
                 type="password"
@@ -223,7 +239,7 @@ export default function AdminApp() {
             <button
               type="submit"
               className="btn btn-primary mt-6 w-full"
-              disabled={loggingIn || !password}
+              disabled={loggingIn || !username || !password}
             >
               {loggingIn ? 'Bezig…' : 'Inloggen'}
             </button>
@@ -236,7 +252,14 @@ export default function AdminApp() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <p className="app-brand">Simon Maree · Beheer</p>
+        <p className="app-brand">
+          Simon Maree · Beheer
+          {loggedInAs ? (
+            <span className="ml-2 text-sm font-normal text-[var(--colorDarkGray)]">
+              ({loggedInAs})
+            </span>
+          ) : null}
+        </p>
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -258,6 +281,7 @@ export default function AdminApp() {
             onClick={() => {
               clearAdminToken()
               setAuthed(false)
+              setLoggedInAs(null)
               setProducten([])
             }}
           >
