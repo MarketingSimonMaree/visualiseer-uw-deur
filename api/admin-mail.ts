@@ -1,11 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { neon } from '@neondatabase/serverless'
 import {
-  loadMailTemplates,
-  saveMailTemplate,
-} from '../shared/mailResultaatCore'
-import {
+  DEFAULT_MAIL_TEMPLATES,
   MAIL_PLACEHOLDERS,
+  type MailTemplate,
   type MailTemplateId,
 } from '../shared/mailTemplates'
 
@@ -29,12 +28,16 @@ function bearerToken(authorization: string | string[] | undefined) {
   const m = /^Bearer\s+(.+)$/i.exec(raw.trim())
   return m?.[1]?.trim()
 }
+/** Token = exp.nonce.username.sig — username mag géén punten bevatten in oude tokens. */
 function requireAuth(req: VercelRequest) {
   const token = bearerToken(req.headers.authorization)
   if (!token) return false
   const parts = token.split('.')
-  if (parts.length !== 4) return false
-  const [exp, nonce, username, sig] = parts
+  if (parts.length < 4) return false
+  const exp = parts[0]
+  const nonce = parts[1]
+  const sig = parts[parts.length - 1]
+  const username = parts.slice(2, -1).join('.')
   if (!exp || !nonce || !username || !sig) return false
   if (!Number.isFinite(Number(exp)) || Date.now() > Number(exp)) return false
   const payload = `${exp}.${nonce}.${username}`
@@ -42,6 +45,47 @@ function requireAuth(req: VercelRequest) {
     .update(payload)
     .digest('hex')
   return safeEqual(sig, expected)
+}
+
+async function ensureMailTemplates(sql: ReturnType<typeof neon>) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS mail_templates (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      html TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `
+  for (const t of DEFAULT_MAIL_TEMPLATES) {
+    await sql`
+      INSERT INTO mail_templates (id, label, subject, html, updated_at)
+      VALUES (${t.id}, ${t.label}, ${t.subject}, ${t.html}, now())
+      ON CONFLICT (id) DO NOTHING
+    `
+  }
+}
+
+async function loadMailTemplates(): Promise<MailTemplate[]> {
+  const databaseUrl = process.env.DATABASE_URL?.trim()
+  if (!databaseUrl) return DEFAULT_MAIL_TEMPLATES.map((t) => ({ ...t }))
+
+  const sql = neon(databaseUrl)
+  await ensureMailTemplates(sql)
+  const rows = await sql`
+    SELECT id, label, subject, html
+    FROM mail_templates
+    ORDER BY id ASC
+  `
+  const list = (
+    rows as Array<{ id: string; label: string; subject: string; html: string }>
+  ).map((r) => ({
+    id: r.id as MailTemplateId,
+    label: r.label,
+    subject: r.subject,
+    html: r.html,
+  }))
+  return list.length ? list : DEFAULT_MAIL_TEMPLATES.map((t) => ({ ...t }))
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -90,13 +134,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).json({ error: 'id moet klant of leads zijn' })
         return
       }
-      const template = await saveMailTemplate({
-        id: body.id,
-        label: body.label,
-        subject: body.subject,
-        html: body.html,
+      const databaseUrl = process.env.DATABASE_URL?.trim()
+      if (!databaseUrl) {
+        res.status(500).json({ error: 'DATABASE_URL ontbreekt' })
+        return
+      }
+      const defaults = DEFAULT_MAIL_TEMPLATES.find((t) => t.id === body.id)!
+      const sql = neon(databaseUrl)
+      await ensureMailTemplates(sql)
+      const existing = await sql`
+        SELECT id, label, subject, html FROM mail_templates WHERE id = ${body.id} LIMIT 1
+      `
+      const cur = (
+        existing as Array<{
+          label: string
+          subject: string
+          html: string
+        }>
+      )[0]
+      const label = body.label ?? cur?.label ?? defaults.label
+      const subject = body.subject ?? cur?.subject ?? defaults.subject
+      const html = body.html ?? cur?.html ?? defaults.html
+      await sql`
+        INSERT INTO mail_templates (id, label, subject, html, updated_at)
+        VALUES (${body.id}, ${label}, ${subject}, ${html}, now())
+        ON CONFLICT (id) DO UPDATE SET
+          label = EXCLUDED.label,
+          subject = EXCLUDED.subject,
+          html = EXCLUDED.html,
+          updated_at = now()
+      `
+      res.status(200).json({
+        template: { id: body.id, label, subject, html },
       })
-      res.status(200).json({ template })
       return
     }
 

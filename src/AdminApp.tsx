@@ -19,6 +19,7 @@ import {
   saveAdminCollectie,
   saveAdminKleur,
   saveAdminProduct,
+  AdminApiError,
   type AdminBeslag,
   type AdminKleur,
   type AdminMailMeta,
@@ -114,7 +115,7 @@ export default function AdminApp() {
     setLoading(true)
     setError(null)
     try {
-      const [p, m, k, b, mail, cols] = await Promise.all([
+      const results = await Promise.allSettled([
         fetchAdminProducten(),
         fetchAdminMontagetypes(),
         fetchAdminKleuren(),
@@ -122,15 +123,56 @@ export default function AdminApp() {
         fetchAdminMail(),
         fetchAdminCollecties(),
       ])
-      setProducten(p)
-      setMontages(m)
-      setKleuren(k)
-      setBeslagLijst(b.beslag)
-      setCollectieDefaults(cols)
-      setMailMeta(mail)
+
+      const authFail = results.find(
+        (r) =>
+          r.status === 'rejected' &&
+          r.reason instanceof AdminApiError &&
+          r.reason.status === 401,
+      )
+      if (authFail) {
+        clearAdminToken()
+        setAuthed(false)
+        setLoggedInAs(null)
+        setError('Sessie verlopen. Log opnieuw in.')
+        return
+      }
+
+      const labels = [
+        'producten',
+        'montagetypes',
+        'kleuren',
+        'beslag',
+        'e-mail',
+        'collecties',
+      ] as const
+      const failures = results
+        .map((r, i) =>
+          r.status === 'rejected'
+            ? `${labels[i]}: ${r.reason instanceof Error ? r.reason.message : 'mislukt'}`
+            : null,
+        )
+        .filter(Boolean)
+
+      if (results[0].status === 'fulfilled') setProducten(results[0].value)
+      if (results[1].status === 'fulfilled') setMontages(results[1].value)
+      if (results[2].status === 'fulfilled') setKleuren(results[2].value)
+      if (results[3].status === 'fulfilled') {
+        setBeslagLijst(results[3].value.beslag)
+      }
+      if (results[4].status === 'fulfilled') setMailMeta(results[4].value)
+      if (results[5].status === 'fulfilled') {
+        setCollectieDefaults(results[5].value)
+      }
+
+      // Blijf ingelogd zolang de sessie geldig is — ook als optionele routes falen
       setAuthed(true)
+      if (failures.length) {
+        setError(
+          `Sommige onderdelen konden niet laden (${failures.join(' · ')}). De rest werkt wel.`,
+        )
+      }
     } catch (err) {
-      setAuthed(false)
       setError(err instanceof Error ? err.message : 'Laden mislukt')
     } finally {
       setLoading(false)

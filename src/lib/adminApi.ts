@@ -72,6 +72,15 @@ export function clearAdminToken() {
   sessionStorage.removeItem(USER_KEY)
 }
 
+export class AdminApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'AdminApiError'
+    this.status = status
+  }
+}
+
 async function readError(res: Response): Promise<string> {
   const raw = await res.text()
   try {
@@ -92,8 +101,9 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   const res = await fetch(path, { ...init, headers })
   if (!res.ok) {
+    // Alleen bij echte auth-fout de sessie wissen — niet bij 500/404 van nieuwe routes
     if (res.status === 401) clearAdminToken()
-    throw new Error(await readError(res))
+    throw new AdminApiError(await readError(res), res.status)
   }
   return (await res.json()) as T
 }
