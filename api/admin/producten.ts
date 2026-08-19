@@ -1,10 +1,51 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
-import {
-  bearerToken,
-  loadAdminSecret,
-  verifyAdminToken,
-} from '../_lib/adminAuth'
+
+function bootstrapPassword(): string {
+  return process.env.ADMIN_PASSWORD?.trim() || 'admin1234'
+}
+
+function adminSecret(): string {
+  return process.env.ADMIN_SECRET?.trim() || `sm-admin:${bootstrapPassword()}`
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const ba = Buffer.from(a)
+  const bb = Buffer.from(b)
+  if (ba.length !== bb.length) return false
+  return timingSafeEqual(ba, bb)
+}
+
+function normalizeUsername(username: string | undefined): string | null {
+  if (!username) return null
+  const cleaned = username.trim().toLowerCase()
+  if (!/^[a-z0-9._-]{2,64}$/.test(cleaned)) return null
+  return cleaned
+}
+
+function bearerToken(
+  authorization: string | string[] | undefined,
+): string | undefined {
+  const raw = Array.isArray(authorization) ? authorization[0] : authorization
+  if (!raw) return undefined
+  const m = /^Bearer\s+(.+)$/i.exec(raw.trim())
+  return m?.[1]?.trim()
+}
+
+function requireAuth(req: VercelRequest): boolean {
+  const token = bearerToken(req.headers.authorization)
+  if (!token) return false
+  const parts = token.split('.')
+  if (parts.length !== 4) return false
+  const [exp, nonce, username, sig] = parts
+  if (!exp || !nonce || !username || !sig) return false
+  if (!Number.isFinite(Number(exp)) || Date.now() > Number(exp)) return false
+  const payload = `${exp}.${nonce}.${username}`
+  const expected = createHmac('sha256', adminSecret()).update(payload).digest('hex')
+  if (!safeEqual(sig, expected)) return false
+  return Boolean(normalizeUsername(username))
+}
 
 type DbRow = {
   id: string
@@ -48,12 +89,6 @@ function mapAdmin(row: DbRow) {
     actief: row.actief !== false,
     updatedAt: row.updated_at ? String(row.updated_at) : null,
   }
-}
-
-function requireAuth(req: VercelRequest): boolean {
-  return Boolean(
-    verifyAdminToken(bearerToken(req.headers.authorization), loadAdminSecret()),
-  )
 }
 
 function slugifyId(id: string): string {
