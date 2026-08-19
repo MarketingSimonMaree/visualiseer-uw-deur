@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { EmailGate } from './components/EmailGate'
 import { FotoUpload } from './components/FotoUpload'
 import { GeneratieVoortgang } from './components/GeneratieVoortgang'
@@ -11,12 +11,12 @@ import {
   stepIndex,
   type FlowStepId,
 } from './components/Stappenplan'
-import { producten } from './data/producten'
 import { cacheGet, cacheSet } from './lib/cache'
 import { MAX_GEN_INPUT_LONG_SIDE } from './config'
 import { blobToDataUrl, resizeBlobForGeneration } from './lib/imageLoader'
 import { buildCacheKey } from './lib/hash'
 import { requestGeneration } from './lib/generate'
+import { fetchProducten } from './lib/productenApi'
 import {
   getGenerationCount,
   incrementDailyGenerationCount,
@@ -53,8 +53,32 @@ export default function App() {
   const [geschiedenis, setGeschiedenis] = useState<GeneratieResultaat[]>([])
   const [actiefId, setActiefId] = useState<string | null>(null)
   const [remaining, setRemaining] = useState(() => remainingGenerations())
+  const [producten, setProducten] = useState<Product[]>([])
+  const [productenError, setProductenError] = useState<string | null>(null)
 
   const actief = geschiedenis.find((g) => g.id === actiefId) ?? null
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchProducten()
+      .then((lijst) => {
+        if (!cancelled) {
+          setProducten(lijst)
+          setProductenError(null)
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setProducten([])
+          setProductenError(
+            err instanceof Error ? err.message : 'Producten laden mislukt',
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const goTo = useCallback((next: AppStep) => {
     setStep(next)
@@ -196,17 +220,26 @@ export default function App() {
         )}
 
         {step === 'catalogus' && montagetype && (
-          <ProductKiezer
-            producten={producten}
-            montagetype={montagetype}
-            selectedId={product?.id ?? null}
-            onSelect={(p) => {
-              setProduct(p)
-              setKleur(null)
-            }}
-            onBack={() => goTo('plan')}
-            onContinue={() => goTo('kleur')}
-          />
+          <>
+            {productenError && (
+              <section className="page">
+                <p className="lead text-[var(--colorError)]" role="alert">
+                  {productenError}
+                </p>
+              </section>
+            )}
+            <ProductKiezer
+              producten={producten}
+              montagetype={montagetype}
+              selectedId={product?.id ?? null}
+              onSelect={(p) => {
+                setProduct(p)
+                setKleur(null)
+              }}
+              onBack={() => goTo('plan')}
+              onContinue={() => goTo('kleur')}
+            />
+          </>
         )}
 
         {step === 'kleur' && product && (

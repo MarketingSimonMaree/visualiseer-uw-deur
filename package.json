@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "import:producten": "node --env-file=.env.local scripts/import-producten.mjs"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "heic2any": "^0.0.4",
     "openai": "^7.4.0",
     "react": "^19.2.8",

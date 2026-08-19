@@ -7,6 +7,7 @@ import {
   runGeneration,
   type GenBody,
 } from './generateCore.ts'
+import { listProducten } from './productenCore.ts'
 
 function loadEnvKey(root: string): string | undefined {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY
@@ -26,7 +27,34 @@ export function generateApiPlugin(): Plugin {
     name: 'sm-generate-api',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (req.url !== '/api/generate' || req.method !== 'POST') {
+        const url = req.url ?? ''
+        const pathname = url.split('?')[0]
+
+        if (pathname === '/api/producten' && req.method === 'GET') {
+          try {
+            const qs = new URL(url, 'http://localhost').searchParams
+            const producten = await listProducten(
+              server.config.root,
+              qs.get('montagetype'),
+            )
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ producten }))
+          } catch (err) {
+            console.error('[api/producten]', err)
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error:
+                  err instanceof Error ? err.message : 'Producten laden mislukt',
+              }),
+            )
+          }
+          return
+        }
+
+        if (pathname !== '/api/generate' || req.method !== 'POST') {
           next()
           return
         }
