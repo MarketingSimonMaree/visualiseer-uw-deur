@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createHmac, timingSafeEqual, randomBytes, scryptSync } from 'node:crypto'
+import { createHmac, timingSafeEqual, randomBytes, scryptSync } from 'crypto'
 import { neon } from '@neondatabase/serverless'
+
+export const config = {
+  maxDuration: 30,
+}
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DEFAULT_USER = { username: 'carlton', password: 'admin1234' }
@@ -62,9 +66,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = (req.body ?? {}) as { username?: string; password?: string }
+    const body = (typeof req.body === 'string'
+      ? JSON.parse(req.body || '{}')
+      : req.body ?? {}) as { username?: string; password?: string }
+
     const username = normalizeUsername(body.username)
-    const password = body.password
+    const password = typeof body.password === 'string' ? body.password : ''
     if (!username || !password) {
       res.status(401).json({ error: 'Onjuiste gebruikersnaam of wachtwoord' })
       return
@@ -108,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       username: row.username,
     })
   } catch (err) {
-    console.error('[api/admin/login]', err)
+    console.error('[api/admin-login]', err)
     res.status(500).json({
       error: err instanceof Error ? err.message : 'Inloggen mislukt',
     })

@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { neon } from '@neondatabase/serverless'
+
+export const config = {
+  maxDuration: 30,
+}
 
 function bootstrapPassword(): string {
   return process.env.ADMIN_PASSWORD?.trim() || 'admin1234'
@@ -127,7 +131,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST' || req.method === 'PATCH') {
-      const body = (req.body ?? {}) as Record<string, unknown>
+      const body = (typeof req.body === 'string'
+        ? JSON.parse(req.body || '{}')
+        : req.body ?? {}) as Record<string, unknown>
       const id = slugifyId(String(body.id ?? ''))
       if (!id) {
         res.status(400).json({ error: 'id is verplicht' })
@@ -205,7 +211,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(405).json({ error: 'Method not allowed' })
   } catch (err) {
-    console.error('[api/admin/producten]', err)
+    console.error('[api/admin-producten]', err)
     res.status(500).json({
       error: err instanceof Error ? err.message : 'Beheeractie mislukt',
     })

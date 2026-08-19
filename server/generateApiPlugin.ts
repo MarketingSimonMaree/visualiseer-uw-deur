@@ -85,7 +85,11 @@ export function generateApiPlugin(): Plugin {
             return
           }
 
-          if (pathname === '/api/admin/login' && req.method === 'POST') {
+          if (
+            (pathname === '/api/admin-login' ||
+              pathname === '/api/admin/login') &&
+            req.method === 'POST'
+          ) {
             const body = (await readJsonBody(req)) as {
               username?: string
               password?: string
@@ -108,7 +112,11 @@ export function generateApiPlugin(): Plugin {
             return
           }
 
-          if (pathname === '/api/admin/password' && req.method === 'POST') {
+          if (
+            (pathname === '/api/admin-password' ||
+              pathname === '/api/admin/password') &&
+            req.method === 'POST'
+          ) {
             const session = isAuthed(req, root)
             if (!session) {
               sendJson(res, 401, { error: 'Niet ingelogd' })
@@ -134,7 +142,10 @@ export function generateApiPlugin(): Plugin {
             return
           }
 
-          if (pathname === '/api/admin/producten') {
+          if (
+            pathname === '/api/admin-producten' ||
+            pathname === '/api/admin/producten'
+          ) {
             if (!isAuthed(req, root)) {
               sendJson(res, 401, { error: 'Niet ingelogd' })
               return

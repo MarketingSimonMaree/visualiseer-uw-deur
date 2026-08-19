@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createHmac, timingSafeEqual, randomBytes, scryptSync } from 'node:crypto'
+import { createHmac, timingSafeEqual, randomBytes, scryptSync } from 'crypto'
 import { neon } from '@neondatabase/serverless'
+
+export const config = {
+  maxDuration: 30,
+}
 
 function bootstrapPassword(): string {
   return process.env.ADMIN_PASSWORD?.trim() || 'admin1234'
@@ -74,7 +78,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = (req.body ?? {}) as {
+    const body = (typeof req.body === 'string'
+      ? JSON.parse(req.body || '{}')
+      : req.body ?? {}) as {
       currentPassword?: string
       newPassword?: string
     }
@@ -113,7 +119,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `
     res.status(200).json({ ok: true })
   } catch (err) {
-    console.error('[api/admin/password]', err)
+    console.error('[api/admin-password]', err)
     res.status(500).json({
       error: err instanceof Error ? err.message : 'Wachtwoord wijzigen mislukt',
     })
