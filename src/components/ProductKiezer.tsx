@@ -24,7 +24,11 @@ export function ProductKiezer({
   const scrollerRef = useRef<HTMLUListElement>(null)
 
   const gefilterdOpType = useMemo(
-    () => producten.filter((p) => p.montagetype === montagetype),
+    () =>
+      producten.filter((p) => {
+        const types = p.montagetypes?.length ? p.montagetypes : [p.montagetype]
+        return types.includes(montagetype)
+      }),
     [producten, montagetype],
   )
 

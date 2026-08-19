@@ -181,6 +181,237 @@ export function generateApiPlugin(): Plugin {
             return
           }
 
+          if (pathname === '/api/admin-montagetypes') {
+            if (!isAuthed(req, root)) {
+              sendJson(res, 401, { error: 'Niet ingelogd' })
+              return
+            }
+            const { neon } = await import('@neondatabase/serverless')
+            const { readFileSync: readEnv, existsSync: existsEnv } =
+              await import('node:fs')
+            const { resolve: resolveEnv } = await import('node:path')
+            let dbUrl = process.env.DATABASE_URL
+            if (!dbUrl) {
+              for (const name of ['.env.local', '.env']) {
+                const p = resolveEnv(root, name)
+                if (!existsEnv(p)) continue
+                const line = readEnv(p, 'utf8')
+                  .split('\n')
+                  .find((l) => l.startsWith('DATABASE_URL='))
+                if (line) {
+                  dbUrl = line
+                    .slice('DATABASE_URL='.length)
+                    .trim()
+                    .replace(/^["']|["']$/g, '')
+                  break
+                }
+              }
+            }
+            if (!dbUrl) throw new Error('DATABASE_URL ontbreekt')
+            const sql = neon(dbUrl)
+            if (req.method === 'GET') {
+              const rows = await sql`
+                SELECT id, label, hint, agent_prompt, sort_order, actief
+                FROM montagetype_defs ORDER BY sort_order ASC
+              `
+              sendJson(res, 200, {
+                montagetypes: (
+                  rows as Array<{
+                    id: string
+                    label: string
+                    hint: string
+                    agent_prompt: string
+                    sort_order: number
+                    actief: boolean
+                  }>
+                ).map((r) => ({
+                  id: r.id,
+                  label: r.label,
+                  hint: r.hint,
+                  agentPrompt: r.agent_prompt,
+                  sortOrder: r.sort_order,
+                  actief: r.actief,
+                })),
+              })
+              return
+            }
+            if (req.method === 'PATCH') {
+              const body = (await readJsonBody(req)) as {
+                id?: string
+                label?: string
+                hint?: string
+                agentPrompt?: string
+                actief?: boolean
+              }
+              if (!body.id) {
+                sendJson(res, 400, { error: 'id is verplicht' })
+                return
+              }
+              await sql`
+                UPDATE montagetype_defs SET
+                  label = COALESCE(${body.label ?? null}, label),
+                  hint = COALESCE(${body.hint ?? null}, hint),
+                  agent_prompt = COALESCE(${body.agentPrompt ?? null}, agent_prompt),
+                  actief = COALESCE(${body.actief ?? null}, actief),
+                  updated_at = now()
+                WHERE id = ${body.id}
+              `
+              const rows = await sql`
+                SELECT id, label, hint, agent_prompt, sort_order, actief
+                FROM montagetype_defs WHERE id = ${body.id} LIMIT 1
+              `
+              const r = (
+                rows as Array<{
+                  id: string
+                  label: string
+                  hint: string
+                  agent_prompt: string
+                  sort_order: number
+                  actief: boolean
+                }>
+              )[0]!
+              sendJson(res, 200, {
+                montagetype: {
+                  id: r.id,
+                  label: r.label,
+                  hint: r.hint,
+                  agentPrompt: r.agent_prompt,
+                  sortOrder: r.sort_order,
+                  actief: r.actief,
+                },
+              })
+              return
+            }
+            sendJson(res, 405, { error: 'Method not allowed' })
+            return
+          }
+
+          if (pathname === '/api/admin-kleuren') {
+            if (!isAuthed(req, root)) {
+              sendJson(res, 401, { error: 'Niet ingelogd' })
+              return
+            }
+            const { neon } = await import('@neondatabase/serverless')
+            const dbUrl =
+              process.env.DATABASE_URL ||
+              (() => {
+                for (const name of ['.env.local', '.env']) {
+                  const p = resolve(root, name)
+                  if (!existsSync(p)) continue
+                  const line = readFileSync(p, 'utf8')
+                    .split('\n')
+                    .find((l) => l.startsWith('DATABASE_URL='))
+                  if (line) {
+                    return line
+                      .slice('DATABASE_URL='.length)
+                      .trim()
+                      .replace(/^["']|["']$/g, '')
+                  }
+                }
+                return undefined
+              })()
+            if (!dbUrl) throw new Error('DATABASE_URL ontbreekt')
+            const sql = neon(dbUrl)
+            if (req.method === 'GET') {
+              const rows = await sql`
+                SELECT id, naam, categorie, hex, staaltje_url, actief, sort_order
+                FROM kleuren_catalogus
+                ORDER BY categorie ASC, sort_order ASC, naam ASC
+              `
+              sendJson(res, 200, {
+                kleuren: (
+                  rows as Array<{
+                    id: string
+                    naam: string
+                    categorie: string
+                    hex: string | null
+                    staaltje_url: string | null
+                    actief: boolean
+                    sort_order: number
+                  }>
+                ).map((r) => ({
+                  id: r.id,
+                  naam: r.naam,
+                  categorie: r.categorie,
+                  hex: r.hex,
+                  staaltjeUrl: r.staaltje_url,
+                  actief: r.actief,
+                  sortOrder: r.sort_order,
+                })),
+              })
+              return
+            }
+            if (req.method === 'POST' || req.method === 'PATCH') {
+              const body = (await readJsonBody(req)) as {
+                id?: string
+                naam?: string
+                categorie?: string
+                hex?: string | null
+                staaltjeUrl?: string | null
+                actief?: boolean
+                sortOrder?: number
+              }
+              const id = (body.id || body.naam || '')
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9-]+/g, '-')
+                .replace(/^-|-$/g, '')
+              if (!id || !body.naam?.trim()) {
+                sendJson(res, 400, { error: 'id en naam zijn verplicht' })
+                return
+              }
+              const categorie =
+                body.categorie === 'eiken' || body.categorie === 'ral'
+                  ? body.categorie
+                  : 'ral'
+              await sql`
+                INSERT INTO kleuren_catalogus (id, naam, categorie, hex, staaltje_url, actief, sort_order, updated_at)
+                VALUES (
+                  ${id}, ${body.naam.trim()}, ${categorie}, ${body.hex ?? null},
+                  ${body.staaltjeUrl ?? null}, ${body.actief !== false},
+                  ${body.sortOrder ?? 100}, now()
+                )
+                ON CONFLICT (id) DO UPDATE SET
+                  naam = EXCLUDED.naam,
+                  categorie = EXCLUDED.categorie,
+                  hex = EXCLUDED.hex,
+                  staaltje_url = EXCLUDED.staaltje_url,
+                  actief = EXCLUDED.actief,
+                  sort_order = EXCLUDED.sort_order,
+                  updated_at = now()
+              `
+              const rows = await sql`
+                SELECT id, naam, categorie, hex, staaltje_url, actief, sort_order
+                FROM kleuren_catalogus WHERE id = ${id} LIMIT 1
+              `
+              const r = (
+                rows as Array<{
+                  id: string
+                  naam: string
+                  categorie: string
+                  hex: string | null
+                  staaltje_url: string | null
+                  actief: boolean
+                  sort_order: number
+                }>
+              )[0]!
+              sendJson(res, 200, {
+                kleur: {
+                  id: r.id,
+                  naam: r.naam,
+                  categorie: r.categorie,
+                  hex: r.hex,
+                  staaltjeUrl: r.staaltje_url,
+                  actief: r.actief,
+                  sortOrder: r.sort_order,
+                },
+              })
+              return
+            }
+            sendJson(res, 405, { error: 'Method not allowed' })
+            return
+          }
+
           if (pathname !== '/api/generate' || req.method !== 'POST') {
             next()
             return

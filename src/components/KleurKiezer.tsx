@@ -1,18 +1,4 @@
-import type { Product } from '../types/product'
-
-const RAL_HEX: Record<string, string> = {
-  'RAL 9010': '#F7F5EC',
-  'RAL 9016': '#F7FBF5',
-  'RAL 9001': '#F5E9D9',
-  'RAL 9005': '#0E0E10',
-  'RAL 7021': '#2F3234',
-  'RAL 7016': '#383E42',
-  'RAL 3004': '#6B1C23',
-  'RAL 6009': '#27352A',
-  'Eiken natuurlijk': '#C4A574',
-  'Eiken gerookt': '#6B5344',
-  'Eiken Afrormosia': '#8B5A2B',
-}
+import type { KleurOptie, Product } from '../types/product'
 
 interface Props {
   product: Product
@@ -24,6 +10,20 @@ interface Props {
   remaining: number
 }
 
+function normalizeKleuren(product: Product): KleurOptie[] {
+  return (product.kleuren ?? []).map((k) =>
+    typeof k === 'string'
+      ? {
+          id: k,
+          naam: k,
+          categorie: /eiken|hout/i.test(k) ? 'eiken' : 'ral',
+          hex: null,
+          staaltjeUrl: null,
+        }
+      : k,
+  )
+}
+
 export function KleurKiezer({
   product,
   value,
@@ -33,6 +33,10 @@ export function KleurKiezer({
   generating,
   remaining,
 }: Props) {
+  const kleuren = normalizeKleuren(product)
+  const ral = kleuren.filter((k) => k.categorie !== 'eiken')
+  const eiken = kleuren.filter((k) => k.categorie === 'eiken')
+
   return (
     <section className="page">
       <button type="button" onClick={onBack} className="back-link">
@@ -62,28 +66,22 @@ export function KleurKiezer({
         controleren dit bij uw aanvraag.
       </div>
 
-      <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {product.kleuren.map((kleur) => {
-          const selected = value === kleur
-          const swatch = RAL_HEX[kleur] ?? '#d0d0d0'
-          return (
-            <li key={kleur}>
-              <button
-                type="button"
-                onClick={() => onChange(kleur)}
-                className={`choice-card flex items-center gap-3 !py-3 ${selected ? 'is-selected' : ''}`}
-              >
-                <span
-                  className="h-10 w-10 shrink-0 rounded-md border border-[var(--colorBorder)]"
-                  style={{ background: swatch }}
-                  aria-hidden
-                />
-                <span className="text-sm font-medium">{kleur}</span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      {ral.length > 0 && (
+        <KleurGrid
+          title="RAL-kleuren"
+          items={ral}
+          value={value}
+          onChange={onChange}
+        />
+      )}
+      {eiken.length > 0 && (
+        <KleurGrid
+          title="Eiken / houtkleuren"
+          items={eiken}
+          value={value}
+          onChange={onChange}
+        />
+      )}
 
       <div className="cta-row items-center">
         <button
@@ -104,5 +102,52 @@ export function KleurKiezer({
         )}
       </div>
     </section>
+  )
+}
+
+function KleurGrid({
+  title,
+  items,
+  value,
+  onChange,
+}: {
+  title: string
+  items: KleurOptie[]
+  value: string | null
+  onChange: (kleur: string) => void
+}) {
+  return (
+    <div className="mt-6">
+      <h2 className="text-base font-semibold">{title}</h2>
+      <ul className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {items.map((kleur) => {
+          const selected = value === kleur.naam || value === kleur.id
+          return (
+            <li key={kleur.id}>
+              <button
+                type="button"
+                onClick={() => onChange(kleur.naam)}
+                className={`choice-card flex items-center gap-3 !py-3 ${selected ? 'is-selected' : ''}`}
+              >
+                <span
+                  className="h-10 w-10 shrink-0 rounded-md border border-[var(--colorBorder)]"
+                  style={{
+                    background: kleur.staaltjeUrl
+                      ? undefined
+                      : kleur.hex || '#d0d0d0',
+                    backgroundImage: kleur.staaltjeUrl
+                      ? `url(${kleur.staaltjeUrl})`
+                      : undefined,
+                    backgroundSize: 'cover',
+                  }}
+                  aria-hidden
+                />
+                <span className="text-sm font-medium">{kleur.naam}</span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }

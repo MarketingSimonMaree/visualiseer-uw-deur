@@ -59,7 +59,28 @@ function stripDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
   return { mime: m[1], buffer: Buffer.from(m[2], 'base64') }
 }
 
-function buildPrompt(body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'montagetype'>>) {
+async function resolveMontagePrompt(montagetype: string): Promise<string> {
+  const databaseUrl = process.env.DATABASE_URL?.trim()
+  if (!databaseUrl) return `Mounting type: ${montagetype}.`
+  try {
+    const { neon } = await import('@neondatabase/serverless')
+    const sql = neon(databaseUrl)
+    const rows = await sql`
+      SELECT agent_prompt FROM montagetype_defs
+      WHERE id = ${montagetype} AND actief = true
+      LIMIT 1
+    `
+    const prompt = (rows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim()
+    return prompt || `Mounting type: ${montagetype}.`
+  } catch {
+    return `Mounting type: ${montagetype}.`
+  }
+}
+
+function buildPrompt(
+  body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'montagetype'>>,
+  montageAgentPrompt: string,
+) {
   return [
     'Photorealistic photo edit of a real room.',
     'Image 1 = customer room photo (base). Keep walls, floor, ceiling, lighting, furniture, stairs, switches, keypad, camera angle and perspective EXACTLY unchanged.',
@@ -67,7 +88,7 @@ function buildPrompt(body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'mon
     'Replace only the door leaf (and frame only if mounting type requires a new frame) so it fits the existing opening naturally.',
     `Door model: ${body.productNaam}.`,
     `Requested colour: ${body.kleur}. Apply this colour to the door leaf/frame realistically; keep panel/glass layout of the model.`,
-    `Mounting type: ${body.montagetype}.`,
+    `Mounting guidance: ${montageAgentPrompt}`,
     'HARD RULES — these override anything visible in the product reference photo:',
     '1. The door must be FULLY CLOSED, flush in the opening. Never ajar, never open, never swinging.',
     '2. Hardware: ALWAYS a standard Dutch lever door handle (deurkruk / horizontal lever on a rose or shield). NEVER a vertical pull bar, long stang, ladder pull, or handle bar.',
@@ -145,14 +166,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const roomFile = await toFile(room.buffer, 'room.jpg', { type: room.mime })
     const productFile = await toFile(productBuf, 'door.jpg', { type: productMime })
 
+    const montagetype = body.montagetype || 'deur-bestaand-kozijn'
+    const montageAgentPrompt = await resolveMontagePrompt(montagetype)
+
     const result = await openai.images.edit({
       model: 'gpt-image-2',
       image: [roomFile, productFile],
-      prompt: buildPrompt({
-        productNaam: body.productNaam,
-        kleur: body.kleur,
-        montagetype: body.montagetype || 'deur-bestaand-kozijn',
-      }),
+      prompt: buildPrompt(
+        {
+          productNaam: body.productNaam,
+          kleur: body.kleur,
+          montagetype,
+        },
+        montageAgentPrompt,
+      ),
       size: IMAGE_SIZE,
       quality: IMAGE_QUALITY,
     })

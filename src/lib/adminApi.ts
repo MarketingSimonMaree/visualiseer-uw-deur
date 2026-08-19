@@ -1,9 +1,16 @@
-import type { Materiaal, Montagetype, Product } from '../types/product'
+import type {
+  KleurOptie,
+  Materiaal,
+  Montagetype,
+  MontagetypeDef,
+  Product,
+} from '../types/product'
 
 export type AdminProduct = Product & {
   paginaUrl: string
   actief: boolean
   updatedAt: string | null
+  kleurIds: string[]
 }
 
 export type ProductInput = {
@@ -11,11 +18,16 @@ export type ProductInput = {
   naam: string
   afbeeldingUrl: string
   paginaUrl?: string
-  montagetype: Montagetype | string
+  montagetypes: Array<Montagetype | string>
   materiaal: Materiaal | string
   collectie: string
-  kleuren: string[]
+  kleurIds: string[]
   actief?: boolean
+}
+
+export type AdminKleur = KleurOptie & {
+  actief: boolean
+  sortOrder: number
 }
 
 const TOKEN_KEY = 'sm-admin-token'
@@ -69,16 +81,13 @@ export async function adminLogin(
   username: string,
   password: string,
 ): Promise<void> {
-  // Geen oude Bearer-token meesturen bij login
   clearAdminToken()
   const res = await fetch('/api/admin-login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   })
-  if (!res.ok) {
-    throw new Error(await readError(res))
-  }
+  if (!res.ok) throw new Error(await readError(res))
   const data = (await res.json()) as { token: string; username: string }
   setAdminToken(data.token, data.username)
 }
@@ -95,10 +104,7 @@ export async function saveAdminProduct(
 ): Promise<AdminProduct> {
   const data = await adminFetch<{ product: AdminProduct }>(
     '/api/admin-producten',
-    {
-      method: 'POST',
-      body: JSON.stringify(input),
-    },
+    { method: 'POST', body: JSON.stringify(input) },
   )
   return data.product
 }
@@ -109,10 +115,7 @@ export async function patchAdminProductApi(
 ): Promise<AdminProduct> {
   const data = await adminFetch<{ product: AdminProduct }>(
     '/api/admin-producten',
-    {
-      method: 'PATCH',
-      body: JSON.stringify({ id, ...patch }),
-    },
+    { method: 'PATCH', body: JSON.stringify({ id, ...patch }) },
   )
   return data.product
 }
@@ -125,4 +128,36 @@ export async function changeAdminPasswordApi(
     method: 'POST',
     body: JSON.stringify({ currentPassword, newPassword }),
   })
+}
+
+export async function fetchAdminMontagetypes(): Promise<MontagetypeDef[]> {
+  const data = await adminFetch<{ montagetypes: MontagetypeDef[] }>(
+    '/api/admin-montagetypes',
+  )
+  return data.montagetypes
+}
+
+export async function patchAdminMontagetype(
+  input: Partial<MontagetypeDef> & { id: string },
+): Promise<MontagetypeDef> {
+  const data = await adminFetch<{ montagetype: MontagetypeDef }>(
+    '/api/admin-montagetypes',
+    { method: 'PATCH', body: JSON.stringify(input) },
+  )
+  return data.montagetype
+}
+
+export async function fetchAdminKleuren(): Promise<AdminKleur[]> {
+  const data = await adminFetch<{ kleuren: AdminKleur[] }>('/api/admin-kleuren')
+  return data.kleuren
+}
+
+export async function saveAdminKleur(
+  input: Partial<AdminKleur> & { id?: string; naam: string; categorie: string },
+): Promise<AdminKleur> {
+  const data = await adminFetch<{ kleur: AdminKleur }>('/api/admin-kleuren', {
+    method: input.id ? 'PATCH' : 'POST',
+    body: JSON.stringify(input),
+  })
+  return data.kleur
 }

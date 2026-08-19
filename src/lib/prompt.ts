@@ -15,7 +15,12 @@ export function buildGeneratePrompt(opts: {
   productNaam: string
   kleur: string
   montagetype: string
+  montageAgentPrompt?: string
 }): string {
+  const montageInstruction =
+    opts.montageAgentPrompt?.trim() ||
+    `Mounting type: ${opts.montagetype}.`
+
   return [
     'Photorealistic photo edit of a real room.',
     'Image 1 = customer room photo (base). Keep walls, floor, ceiling, lighting, furniture, stairs, switches, keypad, camera angle and perspective EXACTLY unchanged.',
@@ -23,7 +28,7 @@ export function buildGeneratePrompt(opts: {
     'Replace only the door leaf (and frame only if mounting type requires a new frame) so it fits the existing opening naturally.',
     `Door model: ${opts.productNaam}.`,
     `Requested colour: ${opts.kleur}. Apply this colour to the door leaf/frame realistically; keep panel/glass layout of the model.`,
-    `Mounting type: ${opts.montagetype}.`,
+    `Mounting guidance: ${montageInstruction}`,
     HARD_VISUAL_RULES,
     'No people, no text overlays, no logos, no watermarks.',
     'Output one photorealistic photo.',

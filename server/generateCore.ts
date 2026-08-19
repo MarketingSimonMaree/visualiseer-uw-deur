@@ -8,6 +8,7 @@ import {
   IMAGE_SIZE,
   MAX_GEN_INPUT_LONG_SIDE,
 } from '../src/config.ts'
+import { DEFAULT_AGENT_PROMPTS, type Montagetype } from '../src/types/product.ts'
 import { buildGeneratePrompt } from '../src/lib/prompt.ts'
 
 export type GenBody = {
@@ -229,13 +230,19 @@ export async function runGeneration(
     type: productPrepared.mime,
   })
 
+  const montagetype = (body.montagetype ||
+    'deur-bestaand-kozijn') as Montagetype
+  const montageAgentPrompt =
+    DEFAULT_AGENT_PROMPTS[montagetype] ?? `Mounting type: ${montagetype}.`
+
   const result = await openai.images.edit({
     model: 'gpt-image-2',
     image: [roomFile, productFile],
     prompt: buildGeneratePrompt({
       productNaam: body.productNaam,
       kleur: body.kleur,
-      montagetype: body.montagetype,
+      montagetype,
+      montageAgentPrompt,
     }),
     size: IMAGE_SIZE,
     quality: IMAGE_QUALITY,

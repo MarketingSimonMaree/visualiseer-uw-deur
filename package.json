@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "import:producten": "node --env-file=.env.local scripts/import-producten.mjs"
+    "import:producten": "node --env-file=.env.local scripts/import-producten.mjs",
+    "migrate:admin-meta": "node --env-file=.env.local scripts/migrate-admin-meta.mjs",
+    "migrate:admin-meta": "node --env-file=.env.local scripts/migrate-admin-meta.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
