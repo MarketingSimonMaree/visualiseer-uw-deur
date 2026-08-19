@@ -28,3 +28,6 @@ export const SITE_URL = 'simonmaree.nl'
 
 /** Knop "Offerte" op het resultaat. */
 export const OFFERTE_URL = 'https://www.simonmaree.nl/prijsindicatie/'
+
+/** Publieke URL van deze visualisator (voor links in e-mails). */
+export const VISUALISEER_URL = 'https://www.simonmaree.nl/visualiseer-uw-deur/'

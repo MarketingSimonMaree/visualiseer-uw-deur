@@ -238,6 +238,9 @@ export async function processMailResultaat(
     montagetype: body.montagetype?.trim() || '—',
     prijsindicatie: Boolean(body.prijsindicatie),
     bron: body.bron,
+    visualiseerUrl:
+      process.env.VISUALISEER_URL?.trim() ||
+      'https://www.simonmaree.nl/visualiseer-uw-deur/',
   }
 
   const resultAttachment: MailAttachment = {

@@ -12,6 +12,7 @@ type TemplateVars = {
   montagetype: string
   prijsindicatie: boolean
   bron: 'mail' | 'offerte'
+  visualiseerUrl: string
 }
 
 const DEFAULT_TEMPLATES = {
@@ -22,6 +23,7 @@ const DEFAULT_TEMPLATES = {
       '<p>Hierbij uw visualisatie van <strong>{{product}}</strong> in <strong>{{kleur}}</strong>.</p>',
       '<p>Montagetype: {{montagetype}}.<br/>Woonplaats: {{woonplaats}}.</p>',
       '{{#prijsindicatie}}<p>U heeft aangegeven interesse te hebben in een prijsindicatie. Wij nemen zo snel mogelijk contact met u op.</p>{{/prijsindicatie}}',
+      '<p>Klopt de visualisatie niet helemaal? <a href="{{visualiseerUrl}}">Visualiseer opnieuw</a>.</p>',
       '<p>Met vriendelijke groet,<br/>Simon Maree</p>',
     ].join('\n'),
   },
@@ -51,11 +53,19 @@ function applyTemplate(template: string, vars: TemplateVars): string {
     '{{montagetype}}': vars.montagetype,
     '{{prijsindicatie}}': vars.prijsindicatie ? 'ja' : 'nee',
     '{{bron}}': vars.bron,
+    '{{visualiseerUrl}}': vars.visualiseerUrl,
   }
   for (const [key, value] of Object.entries(map)) {
     out = out.split(key).join(value)
   }
   return out
+}
+
+function visualiseerUrl(): string {
+  return (
+    process.env.VISUALISEER_URL?.trim() ||
+    'https://www.simonmaree.nl/visualiseer-uw-deur/'
+  )
 }
 
 function stripDataUrl(raw: string): { base64: string; mime: string } {
@@ -214,6 +224,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       montagetype: body.montagetype?.trim() || '—',
       prijsindicatie,
       bron,
+      visualiseerUrl: visualiseerUrl(),
     }
 
     const resultAttachment = {

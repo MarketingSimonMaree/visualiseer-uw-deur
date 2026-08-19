@@ -15,6 +15,10 @@ const MAIL_PLACEHOLDERS = [
   { key: '{{montagetype}}', beschrijving: 'Gekozen montagetype' },
   { key: '{{prijsindicatie}}', beschrijving: 'ja / nee' },
   { key: '{{bron}}', beschrijving: 'mail of offerte' },
+  {
+    key: '{{visualiseerUrl}}',
+    beschrijving: 'Link terug naar de visualisator',
+  },
 ]
 
 const DEFAULT_MAIL_TEMPLATES: Array<{
@@ -32,6 +36,7 @@ const DEFAULT_MAIL_TEMPLATES: Array<{
       '<p>Hierbij uw visualisatie van <strong>{{product}}</strong> in <strong>{{kleur}}</strong>.</p>',
       '<p>Montagetype: {{montagetype}}.<br/>Woonplaats: {{woonplaats}}.</p>',
       '{{#prijsindicatie}}<p>U heeft aangegeven interesse te hebben in een prijsindicatie. Wij nemen zo snel mogelijk contact met u op.</p>{{/prijsindicatie}}',
+      '<p>Klopt de visualisatie niet helemaal? <a href="{{visualiseerUrl}}">Visualiseer opnieuw</a>.</p>',
       '<p>Met vriendelijke groet,<br/>Simon Maree</p>',
     ].join('\n'),
   },
@@ -121,6 +126,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ON CONFLICT (id) DO NOTHING
           `
         }
+        // Oude standaard-klantmail bijwerken met "Visualiseer opnieuw" (laat custom teksten met die zin met rust)
+        const klantDefault = DEFAULT_MAIL_TEMPLATES.find((t) => t.id === 'klant')!
+        await sql`
+          UPDATE mail_templates SET
+            html = ${klantDefault.html},
+            subject = ${klantDefault.subject},
+            updated_at = now()
+          WHERE id = 'klant'
+            AND position('Visualiseer opnieuw' in html) = 0
+        `
         const rows = await sql`
           SELECT id, label, subject, html
           FROM mail_templates
