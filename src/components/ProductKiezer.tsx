@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
-import { collectiesVan } from '../data/producten'
+import type { PublicCatalogusFilter } from '../lib/contentApi'
 import type { Montagetype, Product } from '../types/product'
 
 interface Props {
   producten: Product[]
+  filters: PublicCatalogusFilter[]
   montagetype: Montagetype
   selectedId: string | null
   onSelect: (p: Product) => void
@@ -13,6 +14,7 @@ interface Props {
 
 export function ProductKiezer({
   producten,
+  filters,
   montagetype,
   selectedId,
   onSelect,
@@ -20,7 +22,7 @@ export function ProductKiezer({
   onBack,
 }: Props) {
   const [query, setQuery] = useState('')
-  const [collectie, setCollectie] = useState<string | 'alle'>('alle')
+  const [filterId, setFilterId] = useState<string | 'alle'>('alle')
   const scrollerRef = useRef<HTMLUListElement>(null)
 
   const gefilterdOpType = useMemo(
@@ -32,12 +34,20 @@ export function ProductKiezer({
     [producten, montagetype],
   )
 
-  const collecties = useMemo(() => collectiesVan(gefilterdOpType), [gefilterdOpType])
+  const zichtbareFilters = useMemo(() => {
+    return filters.filter((f) =>
+      gefilterdOpType.some((p) => f.productIds.includes(p.id)),
+    )
+  }, [filters, gefilterdOpType])
 
   const zichtbaar = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const activeFilter =
+      filterId === 'alle'
+        ? null
+        : zichtbareFilters.find((f) => f.id === filterId) ?? null
     return gefilterdOpType.filter((p) => {
-      if (collectie !== 'alle' && p.collectie !== collectie) return false
+      if (activeFilter && !activeFilter.productIds.includes(p.id)) return false
       if (!q) return true
       return (
         p.naam.toLowerCase().includes(q) ||
@@ -45,7 +55,7 @@ export function ProductKiezer({
         p.materiaal.toLowerCase().includes(q)
       )
     })
-  }, [gefilterdOpType, collectie, query])
+  }, [gefilterdOpType, filterId, query, zichtbareFilters])
 
   function scrollByCards(direction: -1 | 1) {
     const el = scrollerRef.current
@@ -83,16 +93,16 @@ export function ProductKiezer({
 
       <div className="mt-4 flex flex-wrap gap-2">
         <FilterChip
-          label="Alle collecties"
-          active={collectie === 'alle'}
-          onClick={() => setCollectie('alle')}
+          label="Alles"
+          active={filterId === 'alle'}
+          onClick={() => setFilterId('alle')}
         />
-        {collecties.map((c) => (
+        {zichtbareFilters.map((f) => (
           <FilterChip
-            key={c}
-            label={c}
-            active={collectie === c}
-            onClick={() => setCollectie(c)}
+            key={f.id}
+            label={f.label}
+            active={filterId === f.id}
+            onClick={() => setFilterId(f.id)}
           />
         ))}
       </div>

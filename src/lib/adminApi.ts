@@ -280,3 +280,65 @@ export async function patchAdminMailTemplate(
   )
   return data.template
 }
+
+export type SituatieTekst = {
+  titelGold: string
+  titel: string
+  lead: string
+  tips: string[]
+  tipsExtraTitel: string
+  tipsExtra: string[]
+}
+
+export type CatalogusFilter = {
+  id: string
+  label: string
+  sortOrder: number
+  actief: boolean
+  productIds: string[]
+}
+
+export async function fetchAdminTeksten(): Promise<{ situatie: SituatieTekst }> {
+  return adminFetch('/api/admin-teksten')
+}
+
+export async function saveAdminTeksten(
+  situatie: SituatieTekst,
+): Promise<SituatieTekst> {
+  const data = await adminFetch<{ situatie: SituatieTekst }>(
+    '/api/admin-teksten',
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ situatie }),
+    },
+  )
+  return data.situatie
+}
+
+export async function fetchAdminFilters(): Promise<CatalogusFilter[]> {
+  const data = await adminFetch<{ filters: CatalogusFilter[] }>(
+    '/api/admin-filters',
+  )
+  return data.filters
+}
+
+export async function saveAdminFilter(
+  input: Partial<CatalogusFilter> & { label: string },
+  isNew: boolean,
+): Promise<CatalogusFilter> {
+  const data = await adminFetch<{ filter: CatalogusFilter }>(
+    '/api/admin-filters',
+    {
+      method: isNew ? 'POST' : 'PATCH',
+      body: JSON.stringify(input),
+    },
+  )
+  return data.filter
+}
+
+export async function deleteAdminFilter(id: string): Promise<void> {
+  await adminFetch('/api/admin-filters', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  })
+}

@@ -6,10 +6,12 @@ import {
   createAdminBeslag,
   fetchAdminBeslag,
   fetchAdminCollecties,
+  fetchAdminFilters,
   fetchAdminKleuren,
   fetchAdminMail,
   fetchAdminMontagetypes,
   fetchAdminProducten,
+  fetchAdminTeksten,
   getAdminToken,
   getAdminUsername,
   patchAdminBeslag,
@@ -25,9 +27,13 @@ import {
   type AdminMailMeta,
   type AdminMailTemplate,
   type AdminProduct,
+  type CatalogusFilter,
   type CollectieDefault,
   type ProductInput,
+  type SituatieTekst,
 } from './lib/adminApi'
+import { AdminFiltersTab } from './components/AdminFiltersTab'
+import { AdminTekstenTab } from './components/AdminTekstenTab'
 import {
   MONTAGETYPE_LABELS,
   type Materiaal,
@@ -41,8 +47,27 @@ type Tab =
   | 'montagetypes'
   | 'beslag'
   | 'kleuren'
+  | 'filters'
+  | 'teksten'
   | 'mail'
   | 'profiel'
+
+const DEFAULT_SITUATIE: SituatieTekst = {
+  titelGold: 'Huidige',
+  titel: 'situatie',
+  lead:
+    'Upload een foto van de deuropening zoals die nu is. Zo ziet u straks precies hoe de nieuwe deur past.',
+  tips: [
+    'Houd de deur recht en in het midden',
+    'Breng de volledige deur en het kozijn in beeld',
+    'Zorg voor voldoende ruimte rondom',
+  ],
+  tipsExtraTitel: 'Let daarnaast op:',
+  tipsExtra: [
+    'Zorg dat de deur gesloten is',
+    'Maak de foto bij voldoende licht en zonder obstakels',
+  ],
+}
 
 const MONTAGETYPES = Object.keys(MONTAGETYPE_LABELS) as Montagetype[]
 const MATERIALEN: Materiaal[] = ['hout', 'staal', 'aluminium']
@@ -80,6 +105,11 @@ export default function AdminApp() {
     [],
   )
   const [mailMeta, setMailMeta] = useState<AdminMailMeta | null>(null)
+  const [situatieTekst, setSituatieTekst] =
+    useState<SituatieTekst>(DEFAULT_SITUATIE)
+  const [catalogusFilters, setCatalogusFilters] = useState<CatalogusFilter[]>(
+    [],
+  )
   const [editingMail, setEditingMail] = useState<AdminMailTemplate | null>(null)
   const [editingCollectie, setEditingCollectie] =
     useState<CollectieDefault | null>(null)
@@ -122,6 +152,8 @@ export default function AdminApp() {
         fetchAdminBeslag(),
         fetchAdminMail(),
         fetchAdminCollecties(),
+        fetchAdminTeksten(),
+        fetchAdminFilters(),
       ])
 
       const authFail = results.find(
@@ -145,6 +177,8 @@ export default function AdminApp() {
         'beslag',
         'e-mail',
         'collecties',
+        'teksten',
+        'filters',
       ] as const
       const failures = results
         .map((r, i) =>
@@ -163,6 +197,12 @@ export default function AdminApp() {
       if (results[4].status === 'fulfilled') setMailMeta(results[4].value)
       if (results[5].status === 'fulfilled') {
         setCollectieDefaults(results[5].value)
+      }
+      if (results[6].status === 'fulfilled') {
+        setSituatieTekst(results[6].value.situatie)
+      }
+      if (results[7].status === 'fulfilled') {
+        setCatalogusFilters(results[7].value)
       }
 
       // Blijf ingelogd zolang de sessie geldig is — ook als optionele routes falen
@@ -384,9 +424,11 @@ export default function AdminApp() {
             [
               ['producten', 'Producten'],
               ['collecties', 'Collecties'],
+              ['filters', 'Filters'],
               ['montagetypes', 'Montagetypes'],
               ['beslag', 'Beslag'],
               ['kleuren', 'Kleuren'],
+              ['teksten', 'Teksten'],
               ['mail', 'E-mail'],
               ['profiel', 'Profiel'],
             ] as const
@@ -833,6 +875,24 @@ export default function AdminApp() {
               ))}
             </ul>
           </div>
+        )}
+
+        {!loading && tab === 'filters' && (
+          <AdminFiltersTab
+            filters={catalogusFilters}
+            producten={producten}
+            onChange={setCatalogusFilters}
+            onError={setError}
+          />
+        )}
+
+        {!loading && tab === 'teksten' && (
+          <AdminTekstenTab
+            key={JSON.stringify(situatieTekst)}
+            initial={situatieTekst}
+            onSaved={setSituatieTekst}
+            onError={setError}
+          />
         )}
 
         {!loading && tab === 'profiel' && (

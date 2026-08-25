@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { ImageLoadError, loadKamerFoto } from '../lib/imageLoader'
+import type { SituatieTekst } from '../lib/adminApi'
 import type { KamerFoto } from '../types/product'
 
 /** Voorbeeldfoto van simonmaree.nl — hoe de klant moet fotograferen. */
@@ -8,11 +9,12 @@ const VOORBEELD_FOTO_URL =
 
 interface Props {
   foto: KamerFoto | null
+  teksten: SituatieTekst
   onLoaded: (foto: KamerFoto) => void
   onContinue: () => void
 }
 
-export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
+export function FotoUpload({ foto, teksten, onLoaded, onContinue }: Props) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -36,7 +38,6 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
     } finally {
       setBusy(false)
       setProgress(null)
-      // Zelfde bestand opnieuw kunnen kiezen
       if (cameraRef.current) cameraRef.current.value = ''
       if (galleryRef.current) galleryRef.current.value = ''
     }
@@ -48,29 +49,32 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
         <div>
           <div className="page-intro">
             <h1 className="section-title">
-              <span className="gold">Huidige</span> situatie
+              <span className="gold">{teksten.titelGold}</span> {teksten.titel}
             </h1>
-            <p className="lead">
-              Upload een foto van de deuropening zoals die nu is. Zo ziet u
-              straks precies hoe de nieuwe deur past.
-            </p>
+            <p className="lead">{teksten.lead}</p>
           </div>
 
-          <ul className="tip-list">
-            <li>Houd de deur recht en in het midden</li>
-            <li>Breng de volledige deur en het kozijn in beeld</li>
-            <li>Zorg voor voldoende ruimte rondom</li>
-          </ul>
+          {teksten.tips.length > 0 && (
+            <ul className="tip-list">
+              {teksten.tips.map((tip) => (
+                <li key={tip}>{tip}</li>
+              ))}
+            </ul>
+          )}
 
-          <p className="mt-5 text-sm font-semibold text-[var(--colorDarkGray)]">
-            Let daarnaast op:
-          </p>
-          <ul className="tip-list tip-list-secondary">
-            <li>Zorg dat de deur gesloten is</li>
-            <li>Maak de foto bij voldoende licht en zonder obstakels</li>
-          </ul>
+          {teksten.tipsExtra.length > 0 && (
+            <>
+              <p className="mt-5 text-sm font-semibold text-[var(--colorDarkGray)]">
+                {teksten.tipsExtraTitel}
+              </p>
+              <ul className="tip-list tip-list-secondary">
+                {teksten.tipsExtra.map((tip) => (
+                  <li key={tip}>{tip}</li>
+                ))}
+              </ul>
+            </>
+          )}
 
-          {/* Camera: capture forceert op mobiel de camera-app */}
           <input
             ref={cameraRef}
             type="file"
@@ -79,7 +83,6 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
             className="sr-only"
             onChange={(e) => void handleFile(e.target.files?.[0])}
           />
-          {/* Galerij: zonder capture → fotobibliotheek */}
           <input
             ref={galleryRef}
             type="file"
@@ -88,7 +91,6 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
             onChange={(e) => void handleFile(e.target.files?.[0])}
           />
 
-          {/* Mobiel: camera + galerij */}
           <div className="cta-row upload-actions-mobile">
             <button
               type="button"
@@ -127,7 +129,6 @@ export function FotoUpload({ foto, onLoaded, onContinue }: Props) {
             )}
           </div>
 
-          {/* Desktop: één uploadknop */}
           <div className="cta-row upload-actions-desktop">
             <button
               type="button"

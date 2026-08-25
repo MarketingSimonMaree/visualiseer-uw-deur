@@ -24,6 +24,11 @@ import { requestGeneration } from './lib/generate'
 import { requestMailResultaat } from './lib/mailResultaat'
 import { fetchProducten } from './lib/productenApi'
 import {
+  fetchSiteContent,
+  type PublicCatalogusFilter,
+} from './lib/contentApi'
+import type { SituatieTekst } from './lib/adminApi'
+import {
   getGenerationCount,
   incrementDailyGenerationCount,
   incrementGenerationCount,
@@ -92,17 +97,37 @@ export default function App() {
   const [remaining, setRemaining] = useState(() => remainingGenerations())
   const [producten, setProducten] = useState<Product[]>([])
   const [productenError, setProductenError] = useState<string | null>(null)
+  const [catalogusFilters, setCatalogusFilters] = useState<
+    PublicCatalogusFilter[]
+  >([])
+  const [situatieTekst, setSituatieTekst] = useState<SituatieTekst>({
+    titelGold: 'Huidige',
+    titel: 'situatie',
+    lead:
+      'Upload een foto van de deuropening zoals die nu is. Zo ziet u straks precies hoe de nieuwe deur past.',
+    tips: [
+      'Houd de deur recht en in het midden',
+      'Breng de volledige deur en het kozijn in beeld',
+      'Zorg voor voldoende ruimte rondom',
+    ],
+    tipsExtraTitel: 'Let daarnaast op:',
+    tipsExtra: [
+      'Zorg dat de deur gesloten is',
+      'Maak de foto bij voldoende licht en zonder obstakels',
+    ],
+  })
 
   const actief = geschiedenis.find((g) => g.id === actiefId) ?? null
 
   useEffect(() => {
     let cancelled = false
-    void fetchProducten()
-      .then((lijst) => {
-        if (!cancelled) {
-          setProducten(lijst)
-          setProductenError(null)
-        }
+    void Promise.all([fetchProducten(), fetchSiteContent()])
+      .then(([lijst, content]) => {
+        if (cancelled) return
+        setProducten(lijst)
+        setProductenError(null)
+        setSituatieTekst(content.situatie)
+        setCatalogusFilters(content.filters)
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -330,6 +355,7 @@ export default function App() {
         {step === 'situatie' && (
           <FotoUpload
             foto={foto}
+            teksten={situatieTekst}
             onLoaded={setFoto}
             onContinue={() => goTo('plan')}
           />
@@ -355,6 +381,7 @@ export default function App() {
             )}
             <ProductKiezer
               producten={producten}
+              filters={catalogusFilters}
               montagetype={montagetype}
               selectedId={product?.id ?? null}
               onSelect={(p) => {

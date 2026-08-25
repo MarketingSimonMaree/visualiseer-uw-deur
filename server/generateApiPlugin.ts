@@ -24,6 +24,14 @@ import {
   upsertAdminProduct,
   type ProductInput,
 } from './productenCore.ts'
+import {
+  deleteAdminFilter,
+  getAdminTeksten,
+  getPublicContent,
+  listAdminFilters,
+  saveAdminTeksten,
+  upsertAdminFilter,
+} from './contentAdminCore.ts'
 
 function loadEnvKey(root: string): string | undefined {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY
@@ -983,6 +991,72 @@ export function generateApiPlugin(): Plugin {
                   : 500
               sendJson(res, status, { error: message })
             }
+            return
+          }
+
+          if (pathname === '/api/content' && req.method === 'GET') {
+            sendJson(res, 200, await getPublicContent(root))
+            return
+          }
+
+          if (pathname === '/api/admin-teksten') {
+            if (!isAuthed(req, root)) {
+              sendJson(res, 401, { error: 'Niet ingelogd' })
+              return
+            }
+            if (req.method === 'GET') {
+              sendJson(res, 200, await getAdminTeksten(root))
+              return
+            }
+            if (req.method === 'PATCH') {
+              const body = (await readJsonBody(req)) as {
+                situatie?: Parameters<typeof saveAdminTeksten>[1]
+              }
+              sendJson(
+                res,
+                200,
+                await saveAdminTeksten(root, body.situatie ?? {}),
+              )
+              return
+            }
+            sendJson(res, 405, { error: 'Method not allowed' })
+            return
+          }
+
+          if (pathname === '/api/admin-filters') {
+            if (!isAuthed(req, root)) {
+              sendJson(res, 401, { error: 'Niet ingelogd' })
+              return
+            }
+            if (req.method === 'GET') {
+              sendJson(res, 200, await listAdminFilters(root))
+              return
+            }
+            if (req.method === 'POST' || req.method === 'PATCH') {
+              const body = (await readJsonBody(req)) as {
+                id?: string
+                label?: string
+                sortOrder?: number
+                actief?: boolean
+                productIds?: string[]
+              }
+              sendJson(
+                res,
+                200,
+                await upsertAdminFilter(root, body, req.method === 'POST'),
+              )
+              return
+            }
+            if (req.method === 'DELETE') {
+              const body = (await readJsonBody(req)) as { id?: string }
+              if (!body.id?.trim()) {
+                sendJson(res, 400, { error: 'id is verplicht' })
+                return
+              }
+              sendJson(res, 200, await deleteAdminFilter(root, body.id.trim()))
+              return
+            }
+            sendJson(res, 405, { error: 'Method not allowed' })
             return
           }
 
