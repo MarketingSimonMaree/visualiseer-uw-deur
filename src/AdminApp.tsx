@@ -881,6 +881,7 @@ export default function AdminApp() {
           <AdminFiltersTab
             filters={catalogusFilters}
             producten={producten}
+            montages={montages}
             onChange={setCatalogusFilters}
             onError={setError}
           />

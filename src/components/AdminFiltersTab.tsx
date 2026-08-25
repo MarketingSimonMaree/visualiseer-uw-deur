@@ -5,6 +5,11 @@ import {
   type AdminProduct,
   type CatalogusFilter,
 } from '../lib/adminApi'
+import {
+  MONTAGETYPE_LABELS,
+  type Montagetype,
+  type MontagetypeDef,
+} from '../types/product'
 
 function Field({
   label,
@@ -35,7 +40,7 @@ function Modal({
       <div
         role="dialog"
         aria-modal="true"
-        className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-[var(--borderRadiusLarge)] bg-white p-6 shadow-xl"
+        className="max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-[var(--borderRadiusLarge)] bg-white p-6 shadow-xl"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <h2 className="section-title text-2xl">{title}</h2>
@@ -49,9 +54,24 @@ function Modal({
   )
 }
 
+function productTypes(p: AdminProduct): string[] {
+  if (p.montagetypes?.length) return p.montagetypes.map(String)
+  return p.montagetype ? [String(p.montagetype)] : []
+}
+
+function montageLabel(
+  id: string,
+  montages: MontagetypeDef[],
+): string {
+  const fromDb = montages.find((m) => m.id === id)
+  if (fromDb?.label) return fromDb.label
+  return MONTAGETYPE_LABELS[id as Montagetype] ?? id
+}
+
 interface Props {
   filters: CatalogusFilter[]
   producten: AdminProduct[]
+  montages: MontagetypeDef[]
   onChange: (next: CatalogusFilter[]) => void
   onError: (msg: string) => void
 }
@@ -59,6 +79,7 @@ interface Props {
 export function AdminFiltersTab({
   filters,
   producten,
+  montages,
   onChange,
   onError,
 }: Props) {
@@ -66,10 +87,25 @@ export function AdminFiltersTab({
   const [isNew, setIsNew] = useState(false)
   const [productQuery, setProductQuery] = useState('')
 
+  const montageOpties = useMemo(() => {
+    const active = montages.filter((m) => m.actief !== false)
+    if (active.length) return active
+    return (Object.keys(MONTAGETYPE_LABELS) as Montagetype[]).map((id) => ({
+      id,
+      label: MONTAGETYPE_LABELS[id],
+      hint: '',
+      agentPrompt: '',
+      sortOrder: 0,
+      actief: true,
+    }))
+  }, [montages])
+
   const zichtbareProducten = useMemo(() => {
+    if (!editing?.montagetype) return []
     const q = productQuery.trim().toLowerCase()
     return producten
       .filter((p) => p.actief !== false)
+      .filter((p) => productTypes(p).includes(editing.montagetype))
       .filter((p) => {
         if (!q) return true
         return (
@@ -79,7 +115,7 @@ export function AdminFiltersTab({
         )
       })
       .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
-  }, [producten, productQuery])
+  }, [producten, productQuery, editing?.montagetype])
 
   function openNew() {
     setIsNew(true)
@@ -87,9 +123,24 @@ export function AdminFiltersTab({
     setEditing({
       id: '',
       label: '',
+      montagetype: String(montageOpties[0]?.id ?? 'deur-bestaand-kozijn'),
       sortOrder: 100,
       actief: true,
       productIds: [],
+    })
+  }
+
+  function setMontagetype(next: string) {
+    if (!editing) return
+    const allowed = new Set(
+      producten
+        .filter((p) => productTypes(p).includes(next))
+        .map((p) => p.id),
+    )
+    setEditing({
+      ...editing,
+      montagetype: next,
+      productIds: editing.productIds.filter((id) => allowed.has(id)),
     })
   }
 
@@ -99,10 +150,15 @@ export function AdminFiltersTab({
       onError('Label is verplicht')
       return
     }
+    if (!editing.montagetype) {
+      onError('Montagetype is verplicht')
+      return
+    }
     void saveAdminFilter(
       {
         id: editing.id || undefined,
         label: editing.label.trim(),
+        montagetype: editing.montagetype,
         sortOrder: editing.sortOrder,
         actief: editing.actief,
         productIds: editing.productIds,
@@ -131,8 +187,7 @@ export function AdminFiltersTab({
             <span className="gold">Filters</span>
           </h1>
           <p className="mt-1 text-[var(--colorDarkGray)]">
-            Catalogusfilters voor klanten. Vink per filter aan welke producten
-            erbij horen.
+            Per montagetype: kies welke deuren bij een filter horen.
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={openNew}>
@@ -157,6 +212,7 @@ export function AdminFiltersTab({
                   )}
                 </p>
                 <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
+                  {montageLabel(f.montagetype, montages)} ·{' '}
                   {f.productIds.length} producten · volgorde {f.sortOrder}
                 </p>
               </div>
@@ -220,6 +276,22 @@ export function AdminFiltersTab({
                 placeholder="Bijv. Steel look"
               />
             </Field>
+
+            <Field label="Montagetype">
+              <select
+                className="field-input w-full"
+                required
+                value={editing.montagetype}
+                onChange={(e) => setMontagetype(e.target.value)}
+              >
+                {montageOpties.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
             <Field label="Volgorde">
               <input
                 type="number"
@@ -251,33 +323,60 @@ export function AdminFiltersTab({
                 placeholder="Zoek producten…"
                 value={productQuery}
                 onChange={(e) => setProductQuery(e.target.value)}
+                disabled={!editing.montagetype}
               />
-              <div className="max-h-64 overflow-y-auto rounded-lg border border-[var(--colorBorder)] p-2">
-                {zichtbareProducten.map((p) => {
-                  const checked = editing.productIds.includes(p.id)
-                  return (
-                    <label
-                      key={p.id}
-                      className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-[#f7f7f7]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          const next = checked
-                            ? editing.productIds.filter((x) => x !== p.id)
-                            : [...editing.productIds, p.id]
-                          setEditing({ ...editing, productIds: next })
-                        }}
-                      />
-                      <span className="flex-1">{p.naam}</span>
-                      <span className="text-xs text-[var(--colorDarkGray)]">
-                        {p.collectie}
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
+              {!editing.montagetype ? (
+                <p className="text-sm text-[var(--colorDarkGray)]">
+                  Kies eerst een montagetype.
+                </p>
+              ) : zichtbareProducten.length === 0 ? (
+                <p className="text-sm text-[var(--colorDarkGray)]">
+                  Geen actieve producten voor dit montagetype.
+                </p>
+              ) : (
+                <div className="max-h-80 overflow-y-auto rounded-lg border border-[var(--colorBorder)] p-2">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {zichtbareProducten.map((p) => {
+                      const checked = editing.productIds.includes(p.id)
+                      return (
+                        <label
+                          key={p.id}
+                          className={`flex cursor-pointer flex-col overflow-hidden rounded-lg border text-left transition-colors ${
+                            checked
+                              ? 'border-[var(--colorPrimary)] bg-[#fdf6f7]'
+                              : 'border-[var(--colorBorder)] bg-white hover:bg-[#f7f7f7]'
+                          }`}
+                        >
+                          <div className="relative aspect-[3/4] bg-[#eee]">
+                            {p.afbeeldingUrl ? (
+                              <img
+                                src={p.afbeeldingUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : null}
+                            <input
+                              type="checkbox"
+                              className="absolute left-2 top-2 h-4 w-4"
+                              checked={checked}
+                              onChange={() => {
+                                const next = checked
+                                  ? editing.productIds.filter((x) => x !== p.id)
+                                  : [...editing.productIds, p.id]
+                                setEditing({ ...editing, productIds: next })
+                              }}
+                            />
+                          </div>
+                          <span className="line-clamp-2 px-2 py-1.5 text-xs font-medium leading-snug">
+                            {p.naam}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <p className="mt-2 text-xs text-[var(--colorDarkGray)]">
                 {editing.productIds.length} geselecteerd
               </p>

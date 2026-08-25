@@ -110,6 +110,7 @@ function slugify(id: string) {
 function mapFilter(row: {
   id: string
   label: string
+  montagetype: string | null
   sort_order: number
   actief: boolean
   product_ids: unknown
@@ -117,6 +118,7 @@ function mapFilter(row: {
   return {
     id: row.id,
     label: row.label,
+    montagetype: row.montagetype ?? '',
     sortOrder: row.sort_order,
     actief: row.actief !== false,
     productIds: parseIds(row.product_ids),
@@ -142,12 +144,14 @@ async function ensure(sql: {
     CREATE TABLE IF NOT EXISTS catalogus_filters (
       id TEXT PRIMARY KEY,
       label TEXT NOT NULL,
+      montagetype TEXT NOT NULL DEFAULT '',
       sort_order INT NOT NULL DEFAULT 100,
       actief BOOLEAN NOT NULL DEFAULT true,
       product_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `
+  await sql`ALTER TABLE catalogus_filters ADD COLUMN IF NOT EXISTS montagetype TEXT NOT NULL DEFAULT ''`
 }
 
 function resourceOf(req: VercelRequest): string {
@@ -181,7 +185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [tekstRows, filterRows] = await Promise.all([
         sql`SELECT payload FROM site_teksten WHERE id = 'situatie' LIMIT 1`,
         sql`
-          SELECT id, label, sort_order, product_ids
+          SELECT id, label, montagetype, sort_order, product_ids
           FROM catalogus_filters
           WHERE actief = true
           ORDER BY sort_order ASC, label ASC
@@ -194,12 +198,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         filterRows as Array<{
           id: string
           label: string
+          montagetype: string | null
           sort_order: number
           product_ids: unknown
         }>
       ).map((r) => ({
         id: r.id,
         label: r.label,
+        montagetype: r.montagetype ?? '',
         sortOrder: r.sort_order,
         productIds: parseIds(r.product_ids),
       }))
@@ -264,7 +270,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (resource === 'filters') {
       if (req.method === 'GET') {
         const rows = await sql`
-          SELECT id, label, sort_order, actief, product_ids
+          SELECT id, label, montagetype, sort_order, actief, product_ids
           FROM catalogus_filters
           ORDER BY sort_order ASC, label ASC
         `
@@ -273,6 +279,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             rows as Array<{
               id: string
               label: string
+              montagetype: string | null
               sort_order: number
               actief: boolean
               product_ids: unknown
@@ -286,6 +293,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const body = (req.body ?? {}) as {
           id?: string
           label?: string
+          montagetype?: string
           sortOrder?: number
           actief?: boolean
           productIds?: string[]
@@ -295,7 +303,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(400).json({ error: 'label is verplicht' })
           return
         }
-        const id = slugify(body.id || label)
+        const montagetype = body.montagetype?.trim() ?? ''
+        if (!montagetype) {
+          res.status(400).json({ error: 'montagetype is verplicht' })
+          return
+        }
+        const id = slugify(body.id || `${montagetype}-${label}`)
         if (!id) {
           res.status(400).json({ error: 'id is verplicht' })
           return
@@ -303,13 +316,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (req.method === 'POST') {
           await sql`
-            INSERT INTO catalogus_filters (id, label, sort_order, actief, product_ids, updated_at)
+            INSERT INTO catalogus_filters (id, label, montagetype, sort_order, actief, product_ids, updated_at)
             VALUES (
-              ${id}, ${label}, ${body.sortOrder ?? 100}, ${body.actief !== false},
+              ${id}, ${label}, ${montagetype}, ${body.sortOrder ?? 100}, ${body.actief !== false},
               ${JSON.stringify(body.productIds ?? [])}::jsonb, now()
             )
             ON CONFLICT (id) DO UPDATE SET
               label = EXCLUDED.label,
+              montagetype = EXCLUDED.montagetype,
               sort_order = EXCLUDED.sort_order,
               actief = EXCLUDED.actief,
               product_ids = EXCLUDED.product_ids,
@@ -317,13 +331,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `
         } else {
           const existing = await sql`
-            SELECT id, label, sort_order, actief, product_ids
+            SELECT id, label, montagetype, sort_order, actief, product_ids
             FROM catalogus_filters WHERE id = ${id} LIMIT 1
           `
           const cur = (
             existing as Array<{
               id: string
               label: string
+              montagetype: string | null
               sort_order: number
               actief: boolean
               product_ids: unknown
@@ -340,6 +355,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sql`
             UPDATE catalogus_filters SET
               label = ${label},
+              montagetype = ${montagetype || cur.montagetype || ''},
               sort_order = ${body.sortOrder ?? cur.sort_order},
               actief = ${body.actief ?? cur.actief},
               product_ids = ${JSON.stringify(productIds)}::jsonb,
@@ -349,7 +365,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const rows = await sql`
-          SELECT id, label, sort_order, actief, product_ids
+          SELECT id, label, montagetype, sort_order, actief, product_ids
           FROM catalogus_filters WHERE id = ${id} LIMIT 1
         `
         res.status(200).json({
@@ -358,6 +374,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               rows as Array<{
                 id: string
                 label: string
+                montagetype: string | null
                 sort_order: number
                 actief: boolean
                 product_ids: unknown

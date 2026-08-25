@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PublicCatalogusFilter } from '../lib/contentApi'
 import type { Montagetype, Product } from '../types/product'
 
@@ -25,6 +25,10 @@ export function ProductKiezer({
   const [filterId, setFilterId] = useState<string | 'alle'>('alle')
   const scrollerRef = useRef<HTMLUListElement>(null)
 
+  useEffect(() => {
+    setFilterId('alle')
+  }, [montagetype])
+
   const gefilterdOpType = useMemo(
     () =>
       producten.filter((p) => {
@@ -35,10 +39,18 @@ export function ProductKiezer({
   )
 
   const zichtbareFilters = useMemo(() => {
-    return filters.filter((f) =>
-      gefilterdOpType.some((p) => f.productIds.includes(p.id)),
+    return filters.filter(
+      (f) =>
+        f.montagetype === montagetype &&
+        gefilterdOpType.some((p) => f.productIds.includes(p.id)),
     )
-  }, [filters, gefilterdOpType])
+  }, [filters, gefilterdOpType, montagetype])
+
+  useEffect(() => {
+    if (filterId !== 'alle' && !zichtbareFilters.some((f) => f.id === filterId)) {
+      setFilterId('alle')
+    }
+  }, [filterId, zichtbareFilters])
 
   const zichtbaar = useMemo(() => {
     const q = query.trim().toLowerCase()

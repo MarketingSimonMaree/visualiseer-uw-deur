@@ -293,6 +293,7 @@ export type SituatieTekst = {
 export type CatalogusFilter = {
   id: string
   label: string
+  montagetype: string
   sortOrder: number
   actief: boolean
   productIds: string[]
