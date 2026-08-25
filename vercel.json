@@ -1,6 +1,19 @@
 {
   "rewrites": [
     { "source": "/beheer", "destination": "/index.html" },
-    { "source": "/beheer/", "destination": "/index.html" }
+    { "source": "/beheer/", "destination": "/index.html" },
+    { "source": "/api/content", "destination": "/api/site?resource=content" },
+    {
+      "source": "/api/admin-teksten",
+      "destination": "/api/site?resource=teksten"
+    },
+    {
+      "source": "/api/admin-filters",
+      "destination": "/api/site?resource=filters"
+    },
+    {
+      "source": "/api/admin-password",
+      "destination": "/api/admin-login?action=password"
+    }
   ]
 }

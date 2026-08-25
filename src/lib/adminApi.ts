@@ -155,7 +155,7 @@ export async function changeAdminPasswordApi(
   currentPassword: string,
   newPassword: string,
 ): Promise<void> {
-  await adminFetch<{ ok: boolean }>('/api/admin-password', {
+  await adminFetch<{ ok: boolean }>('/api/admin-login?action=password', {
     method: 'POST',
     body: JSON.stringify({ currentPassword, newPassword }),
   })
@@ -299,14 +299,14 @@ export type CatalogusFilter = {
 }
 
 export async function fetchAdminTeksten(): Promise<{ situatie: SituatieTekst }> {
-  return adminFetch('/api/admin-teksten')
+  return adminFetch('/api/site?resource=teksten')
 }
 
 export async function saveAdminTeksten(
   situatie: SituatieTekst,
 ): Promise<SituatieTekst> {
   const data = await adminFetch<{ situatie: SituatieTekst }>(
-    '/api/admin-teksten',
+    '/api/site?resource=teksten',
     {
       method: 'PATCH',
       body: JSON.stringify({ situatie }),
@@ -317,7 +317,7 @@ export async function saveAdminTeksten(
 
 export async function fetchAdminFilters(): Promise<CatalogusFilter[]> {
   const data = await adminFetch<{ filters: CatalogusFilter[] }>(
-    '/api/admin-filters',
+    '/api/site?resource=filters',
   )
   return data.filters
 }
@@ -327,7 +327,7 @@ export async function saveAdminFilter(
   isNew: boolean,
 ): Promise<CatalogusFilter> {
   const data = await adminFetch<{ filter: CatalogusFilter }>(
-    '/api/admin-filters',
+    '/api/site?resource=filters',
     {
       method: isNew ? 'POST' : 'PATCH',
       body: JSON.stringify(input),
@@ -337,7 +337,7 @@ export async function saveAdminFilter(
 }
 
 export async function deleteAdminFilter(id: string): Promise<void> {
-  await adminFetch('/api/admin-filters', {
+  await adminFetch('/api/site?resource=filters', {
     method: 'DELETE',
     body: JSON.stringify({ id }),
   })

@@ -29,7 +29,7 @@ const FALLBACK_SITUATIE: SituatieTekst = {
 
 export async function fetchSiteContent(): Promise<SiteContent> {
   try {
-    const res = await fetch('/api/content')
+    const res = await fetch('/api/site?resource=content')
     if (!res.ok) {
       return { situatie: FALLBACK_SITUATIE, filters: [] }
     }

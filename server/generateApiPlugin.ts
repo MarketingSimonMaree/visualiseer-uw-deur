@@ -98,7 +98,8 @@ export function generateApiPlugin(): Plugin {
           if (
             (pathname === '/api/admin-login' ||
               pathname === '/api/admin/login') &&
-            req.method === 'POST'
+            req.method === 'POST' &&
+            !url.includes('action=password')
           ) {
             const body = (await readJsonBody(req)) as {
               username?: string
@@ -124,7 +125,9 @@ export function generateApiPlugin(): Plugin {
 
           if (
             (pathname === '/api/admin-password' ||
-              pathname === '/api/admin/password') &&
+              pathname === '/api/admin/password' ||
+              (pathname === '/api/admin-login' &&
+                url.includes('action=password'))) &&
             req.method === 'POST'
           ) {
             const session = isAuthed(req, root)
@@ -994,12 +997,22 @@ export function generateApiPlugin(): Plugin {
             return
           }
 
-          if (pathname === '/api/content' && req.method === 'GET') {
-            sendJson(res, 200, await getPublicContent(root))
-            return
+          if (
+            pathname === '/api/content' ||
+            (pathname === '/api/site' &&
+              (url.includes('resource=content') ||
+                !url.includes('resource=')))
+          ) {
+            if (req.method === 'GET') {
+              sendJson(res, 200, await getPublicContent(root))
+              return
+            }
           }
 
-          if (pathname === '/api/admin-teksten') {
+          if (
+            pathname === '/api/admin-teksten' ||
+            (pathname === '/api/site' && url.includes('resource=teksten'))
+          ) {
             if (!isAuthed(req, root)) {
               sendJson(res, 401, { error: 'Niet ingelogd' })
               return
@@ -1023,7 +1036,10 @@ export function generateApiPlugin(): Plugin {
             return
           }
 
-          if (pathname === '/api/admin-filters') {
+          if (
+            pathname === '/api/admin-filters' ||
+            (pathname === '/api/site' && url.includes('resource=filters'))
+          ) {
             if (!isAuthed(req, root)) {
               sendJson(res, 401, { error: 'Niet ingelogd' })
               return
