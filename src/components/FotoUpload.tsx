@@ -92,36 +92,54 @@ export function FotoUpload({ foto, teksten, onLoaded, onContinue }: Props) {
           />
 
           <div className="cta-row upload-actions-mobile">
-            <button
-              type="button"
-              className={`btn ${foto ? 'btn-secondary' : 'btn-primary'}`}
-              disabled={busy}
-              onClick={() => cameraRef.current?.click()}
-            >
-              {busy ? progress ?? 'Bezig…' : 'Foto maken'}
-              <span className="btn-arrow" aria-hidden>
-                →
-              </span>
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={busy}
-              onClick={() => galleryRef.current?.click()}
-            >
-              Kies uit galerij
-              <span className="btn-arrow" aria-hidden>
-                →
-              </span>
-            </button>
+            <div className="upload-actions-pair">
+              <button
+                type="button"
+                className={`btn btn-compact ${foto ? 'btn-secondary' : 'btn-primary'}`}
+                disabled={busy}
+                onClick={() => cameraRef.current?.click()}
+                aria-label="Foto maken"
+              >
+                {busy ? (
+                  <span className="truncate">{progress ?? 'Bezig…'}</span>
+                ) : (
+                  <>
+                    <svg
+                      className="btn-icon"
+                      viewBox="0 0 24 24"
+                      width="20"
+                      height="20"
+                      aria-hidden
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    Foto
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-compact"
+                disabled={busy}
+                onClick={() => galleryRef.current?.click()}
+              >
+                Uploaden
+              </button>
+            </div>
             {foto && (
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-primary btn-compact upload-actions-next"
                 disabled={busy}
                 onClick={onContinue}
               >
-                Volgende stap
+                Volgende
                 <span className="btn-arrow" aria-hidden>
                   →
                 </span>

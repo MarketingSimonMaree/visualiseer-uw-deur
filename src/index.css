@@ -436,6 +436,34 @@
 /* Upload-acties: mobiel vs desktop (niet via Tailwind — .cta-row zou display overrulen) */
 .upload-actions-mobile {
   display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.upload-actions-pair {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.upload-actions-pair .btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.upload-actions-next {
+  width: 100%;
+}
+
+.btn-compact {
+  gap: 0.45rem;
+  padding: 12px 14px;
+  font-size: 0.9375rem;
+}
+
+.btn-icon {
+  flex-shrink: 0;
 }
 
 .upload-actions-desktop {
