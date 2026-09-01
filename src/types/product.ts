@@ -71,9 +71,9 @@ export const DEFAULT_AGENT_PROMPTS: Record<Montagetype, string> = {
   schuifdeur:
     'Install a sliding door on a rail in front of the wall. The door must slide, not swing on hinges.',
   voordeur:
-    'Replace only the exterior front door leaf in the existing exterior frame. Keep the existing outdoor frame unchanged.',
+    'Replace only the exterior front door leaf in the existing exterior frame. Keep the existing outdoor frame unchanged. FRONT DOOR: never a lever klink/deurkruk — only a round knob or a pull bar/stang if the product model shows one.',
   'voordeur-met-kozijn':
-    'Replace the exterior front door including a new exterior frame that fits the opening.',
+    'Replace the exterior front door including a new exterior frame that fits the opening. FRONT DOOR: never a lever klink/deurkruk — only a round knob or a pull bar/stang if the product model shows one.',
 }
 
 export interface KamerFoto {

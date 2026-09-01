@@ -148,21 +148,41 @@ function buildPrompt(
   body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'montagetype'>>,
   guidance: { montage: string; beslag: string; extra: string },
 ) {
+  const frontDoor =
+    body.montagetype === 'voordeur' ||
+    body.montagetype === 'voordeur-met-kozijn'
+  const beslag =
+    guidance.beslag ||
+    (frontDoor
+      ? 'Hardware: exterior front-door hardware only — round/oval knob or a pull bar/stang if the product shows one. NEVER a lever deurkruk/klink.'
+      : 'Hardware: use a standard Dutch lever door handle (deurkruk). NEVER a vertical pull bar unless explicitly required.')
+
   return [
     'Photorealistic photo edit of a real room.',
-    'Image 1 = customer room photo (base). Keep walls, floor, ceiling, lighting, furniture, stairs, switches, keypad, camera angle and perspective EXACTLY unchanged.',
-    'Image 2 = product reference for the NEW door design only.',
+    'Image 1 = customer room photo (base). Keep walls, floor, ceiling, lighting, furniture, stairs, switches, keypad, camera angle and perspective EXACTLY unchanged — EXCEPT the door itself, which must match Image 2.',
+    'Image 2 = product reference for the NEW door design only. Image 2 is the authority for panels, glass/no-glass, and hardware style.',
     'Replace only the door leaf (and frame only if mounting type requires a new frame) so it fits the existing opening naturally.',
     `Door model: ${body.productNaam}.`,
-    `Requested colour: ${body.kleur}. Apply this colour to the door leaf/frame realistically; keep panel/glass layout of the model.`,
+    `Requested colour: ${body.kleur}. Apply this colour to the door leaf/frame realistically; keep panel and glass/no-glass layout of the model (Image 2).`,
     `Mounting guidance: ${guidance.montage}`,
-    `Hardware guidance: ${guidance.beslag}`,
+    `Hardware guidance: ${beslag}`,
     guidance.extra ? `Additional product guidance: ${guidance.extra}` : '',
-    'HARD RULES — these override anything visible in the product reference photo:',
+    'HARD RULES — these override anything visible in either photo:',
     '1. The door must be FULLY CLOSED, flush in the opening. Never ajar, never open, never swinging.',
     '2. HINGE vs HANDLE SIDE (critical): Keep the hinge side exactly as in Image 1. Put operable hardware ALWAYS on the OPPOSITE side of the hinges. Ignore the handle side shown on the product photo.',
-    '3. Any glass in the door must be CLEAR and TRANSPARENT (see-through). Never frosted, sandblasted, milky, smoked-opaque, or privacy glass.',
-    '4. From Image 2, copy only the door design: proportions, panels, frame profile, and material look. Ignore its open/closed state and frosted glass. Follow the hardware guidance above for handle/pull type.',
+    '3. GLASS / NO-GLASS LAYOUT (critical): Copy solid panels vs glass STRICTLY from Image 2 (the product). If Image 2 has NO glass, the new door must be FULLY OPAQUE with ZERO glass or glazing — even when Image 1 shows a glazed door. Never invent glass, sidelights, or vision panels that are not on Image 2. If Image 2 has glass, place clear glass only in those same panel positions.',
+    '4. If there IS glass from Image 2, it must be CLEAR and TRANSPARENT (see-through). Never frosted, sandblasted, milky, smoked-opaque, or privacy glass.',
+    '5. From Image 2, copy only the door design: proportions, panels, frame profile, and material look. Ignore its open/closed state. Follow the hardware guidance for handle/pull type.',
+    frontDoor
+      ? [
+          'FRONT DOOR HARDWARE (critical — exterior voordeur):',
+          'NEVER use an interior lever handle / deurkruk / klink.',
+          'Dutch front doors do not get a lever klink.',
+          'Use ONLY exterior-appropriate hardware: a round/oval door knob (deurknop) OR a pull bar/stang IF Image 2 (product) already shows that hardware.',
+          'If Image 2 shows a knob, use a knob. If Image 2 shows a vertical or horizontal pull bar/stang, use that same style.',
+          'If Image 2 hardware is unclear, prefer a round door knob — never a lever klink.',
+        ].join(' ')
+      : '',
     'No people, no text overlays, no logos, no watermarks.',
     'Output one photorealistic photo.',
   ]

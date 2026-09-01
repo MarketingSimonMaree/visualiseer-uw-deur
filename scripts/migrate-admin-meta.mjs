@@ -42,7 +42,7 @@ const MONTAGES = [
     label: 'Nieuwe voordeur in bestaand kozijn',
     hint: 'Buitendeur in uw bestaande kozijn',
     agent_prompt:
-      'Replace only the exterior front door leaf in the existing exterior frame. Keep the existing outdoor frame unchanged.',
+      'Replace only the exterior front door leaf in the existing exterior frame. Keep the existing outdoor frame unchanged. FRONT DOOR: never a lever klink/deurkruk — only a round knob or a pull bar/stang if the product model shows one.',
     sort_order: 50,
   },
   {
@@ -50,7 +50,7 @@ const MONTAGES = [
     label: 'Nieuwe voordeur mét nieuw kozijn',
     hint: 'Buitendeur inclusief nieuw kozijn',
     agent_prompt:
-      'Replace the exterior front door including a new exterior frame that fits the opening.',
+      'Replace the exterior front door including a new exterior frame that fits the opening. FRONT DOOR: never a lever klink/deurkruk — only a round knob or a pull bar/stang if the product model shows one.',
     sort_order: 60,
   },
 ]
