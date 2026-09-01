@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PublicCatalogusFilter } from '../lib/contentApi'
 import type { Montagetype, Product } from '../types/product'
 
+type ChipId = 'alle' | `filter:${string}` | `collectie:${string}`
+
 interface Props {
   producten: Product[]
   filters: PublicCatalogusFilter[]
@@ -22,11 +24,11 @@ export function ProductKiezer({
   onBack,
 }: Props) {
   const [query, setQuery] = useState('')
-  const [filterId, setFilterId] = useState<string | 'alle'>('alle')
+  const [chipId, setChipId] = useState<ChipId>('alle')
   const scrollerRef = useRef<HTMLUListElement>(null)
 
   useEffect(() => {
-    setFilterId('alle')
+    setChipId('alle')
   }, [montagetype])
 
   const gefilterdOpType = useMemo(
@@ -44,20 +46,39 @@ export function ProductKiezer({
     )
   }, [filters, gefilterdOpType])
 
-  useEffect(() => {
-    if (filterId !== 'alle' && !zichtbareFilters.some((f) => f.id === filterId)) {
-      setFilterId('alle')
+  const zichtbareCollecties = useMemo(() => {
+    const names = new Set<string>()
+    for (const p of gefilterdOpType) {
+      const name = p.collectie?.trim()
+      if (name) names.add(name)
     }
-  }, [filterId, zichtbareFilters])
+    return [...names].sort((a, b) => a.localeCompare(b, 'nl'))
+  }, [gefilterdOpType])
+
+  useEffect(() => {
+    if (chipId === 'alle') return
+    if (chipId.startsWith('filter:')) {
+      const id = chipId.slice('filter:'.length)
+      if (!zichtbareFilters.some((f) => f.id === id)) setChipId('alle')
+      return
+    }
+    if (chipId.startsWith('collectie:')) {
+      const name = chipId.slice('collectie:'.length)
+      if (!zichtbareCollecties.includes(name)) setChipId('alle')
+    }
+  }, [chipId, zichtbareFilters, zichtbareCollecties])
 
   const zichtbaar = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const activeFilter =
-      filterId === 'alle'
-        ? null
-        : zichtbareFilters.find((f) => f.id === filterId) ?? null
     return gefilterdOpType.filter((p) => {
-      if (activeFilter && !activeFilter.productIds.includes(p.id)) return false
+      if (chipId.startsWith('filter:')) {
+        const id = chipId.slice('filter:'.length)
+        const active = zichtbareFilters.find((f) => f.id === id)
+        if (active && !active.productIds.includes(p.id)) return false
+      } else if (chipId.startsWith('collectie:')) {
+        const name = chipId.slice('collectie:'.length)
+        if (p.collectie !== name) return false
+      }
       if (!q) return true
       return (
         p.naam.toLowerCase().includes(q) ||
@@ -65,7 +86,7 @@ export function ProductKiezer({
         p.materiaal.toLowerCase().includes(q)
       )
     })
-  }, [gefilterdOpType, filterId, query, zichtbareFilters])
+  }, [gefilterdOpType, chipId, query, zichtbareFilters])
 
   function scrollByCards(direction: -1 | 1) {
     const el = scrollerRef.current
@@ -104,15 +125,23 @@ export function ProductKiezer({
       <div className="mt-4 flex flex-wrap gap-2">
         <FilterChip
           label="Alles"
-          active={filterId === 'alle'}
-          onClick={() => setFilterId('alle')}
+          active={chipId === 'alle'}
+          onClick={() => setChipId('alle')}
         />
         {zichtbareFilters.map((f) => (
           <FilterChip
-            key={f.id}
+            key={`filter:${f.id}`}
             label={f.label}
-            active={filterId === f.id}
-            onClick={() => setFilterId(f.id)}
+            active={chipId === `filter:${f.id}`}
+            onClick={() => setChipId(`filter:${f.id}`)}
+          />
+        ))}
+        {zichtbareCollecties.map((name) => (
+          <FilterChip
+            key={`collectie:${name}`}
+            label={name}
+            active={chipId === `collectie:${name}`}
+            onClick={() => setChipId(`collectie:${name}`)}
           />
         ))}
       </div>
