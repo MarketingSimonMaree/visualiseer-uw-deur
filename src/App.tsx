@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { EmailGate } from './components/EmailGate'
 import { FotoUpload } from './components/FotoUpload'
 import { GeneratieVoortgang } from './components/GeneratieVoortgang'
@@ -120,6 +120,16 @@ export default function App() {
       'Maak de foto bij voldoende licht en zonder obstakels',
     ],
   })
+
+  const actieveMontageOpties = useMemo(() => {
+    return montagetypeOpties.filter((m) => {
+      if (m.actief === false) return false
+      return producten.some((p) => {
+        const types = p.montagetypes?.length ? p.montagetypes : [p.montagetype]
+        return types.includes(m.id)
+      })
+    })
+  }, [montagetypeOpties, producten])
 
   const actief = geschiedenis.find((g) => g.id === actiefId) ?? null
 
@@ -374,7 +384,7 @@ export default function App() {
 
         {step === 'plan' && (
           <MontagetypeKiezer
-            options={montagetypeOpties}
+            options={actieveMontageOpties}
             value={montagetype}
             onChange={setMontagetype}
             onBack={() => goTo('situatie')}

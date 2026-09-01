@@ -879,11 +879,27 @@ export function generateApiPlugin(): Plugin {
                 `
 
                 let productsUpdated = 0
+                const productRows = await sql`
+                  SELECT id, montagetypes, kleur_ids, beslag_id, agent_extra, montagetype
+                  FROM producten WHERE collectie = ${collectie}
+                `
+                if (montagetypes.length > 0) {
+                  for (const p of productRows as Array<{
+                    id: string
+                    montagetype: string
+                  }>) {
+                    const nextPrimary = montagetypes[0] ?? p.montagetype
+                    await sql`
+                      UPDATE producten SET
+                        montagetypes = ${JSON.stringify(montagetypes)}::jsonb,
+                        montagetype = ${nextPrimary},
+                        updated_at = now()
+                      WHERE id = ${p.id}
+                    `
+                    productsUpdated += 1
+                  }
+                }
                 if (body.applyToProducts) {
-                  const productRows = await sql`
-                    SELECT id, montagetypes, kleur_ids, beslag_id, agent_extra, montagetype
-                    FROM producten WHERE collectie = ${collectie}
-                  `
                   for (const p of productRows as Array<{
                     id: string
                     montagetypes: unknown
@@ -892,11 +908,6 @@ export function generateApiPlugin(): Plugin {
                     agent_extra: string | null
                     montagetype: string
                   }>) {
-                    const nextTypes =
-                      montagetypes.length > 0
-                        ? montagetypes
-                        : parseArr(p.montagetypes)
-                    const nextPrimary = nextTypes[0] ?? p.montagetype
                     const nextKleuren =
                       kleurIds.length > 0 ? kleurIds : parseArr(p.kleur_ids)
                     const nextBeslag = beslagId ?? p.beslag_id
@@ -906,15 +917,13 @@ export function generateApiPlugin(): Plugin {
                         : (p.agent_extra ?? '')
                     await sql`
                       UPDATE producten SET
-                        montagetypes = ${JSON.stringify(nextTypes)}::jsonb,
-                        montagetype = ${nextPrimary},
                         kleur_ids = ${JSON.stringify(nextKleuren)}::jsonb,
                         beslag_id = ${nextBeslag},
                         agent_extra = ${nextExtra},
                         updated_at = now()
                       WHERE id = ${p.id}
                     `
-                    productsUpdated += 1
+                    if (!productsUpdated) productsUpdated += 1
                   }
                 }
 

@@ -178,12 +178,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `
 
       let productsUpdated = 0
+      const productRows = await sql`
+        SELECT id, montagetypes, kleur_ids, beslag_id, agent_extra, montagetype
+        FROM producten WHERE collectie = ${collectie}
+      `
+
+      // Montagetypes van de collectie altijd doorzetten naar producten
+      // (anders blijft een uitgevinkt type op deuren staan).
+      if (montagetypes.length > 0) {
+        for (const p of productRows as Array<{
+          id: string
+          montagetype: string
+        }>) {
+          const nextPrimary = montagetypes[0] ?? p.montagetype
+          await sql`
+            UPDATE producten SET
+              montagetypes = ${JSON.stringify(montagetypes)}::jsonb,
+              montagetype = ${nextPrimary},
+              updated_at = now()
+            WHERE id = ${p.id}
+          `
+          productsUpdated += 1
+        }
+      }
+
       if (body.applyToProducts) {
-        const primary = montagetypes[0] ?? null
-        const productRows = await sql`
-          SELECT id, montagetypes, kleur_ids, beslag_id, agent_extra, montagetype
-          FROM producten WHERE collectie = ${collectie}
-        `
         for (const p of productRows as Array<{
           id: string
           montagetypes: unknown
@@ -192,9 +211,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           agent_extra: string | null
           montagetype: string
         }>) {
-          const nextTypes =
-            montagetypes.length > 0 ? montagetypes : parseArray(p.montagetypes)
-          const nextPrimary = nextTypes[0] ?? p.montagetype
           const nextKleuren =
             kleurIds.length > 0 ? kleurIds : parseArray(p.kleur_ids)
           const nextBeslag = beslagId ?? p.beslag_id
@@ -202,15 +218,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             agentExtra.trim() !== '' ? agentExtra : (p.agent_extra ?? '')
           await sql`
             UPDATE producten SET
-              montagetypes = ${JSON.stringify(nextTypes)}::jsonb,
-              montagetype = ${nextPrimary},
               kleur_ids = ${JSON.stringify(nextKleuren)}::jsonb,
               beslag_id = ${nextBeslag},
               agent_extra = ${nextExtra},
               updated_at = now()
             WHERE id = ${p.id}
           `
-          productsUpdated += 1
+          if (!productsUpdated) productsUpdated += 1
         }
       }
 

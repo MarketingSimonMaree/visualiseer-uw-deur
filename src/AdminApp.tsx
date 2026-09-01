@@ -565,9 +565,8 @@ export default function AdminApp() {
             </h1>
             <p className="mt-1 text-[var(--colorDarkGray)]">
               Standaarden per categorie (bijv. Aluminium voordeuren): montagetypes,
-              kleuren, beslag en extra info voor de image-agent. Lege
-              productvelden nemen deze over. Met “toepassen” schrijf je ze ook
-              door naar alle producten in die collectie.
+              kleuren, beslag en extra info voor de image-agent. Montagetypes
+              schrijven bij opslaan altijd door naar de deuren in die collectie.
             </p>
             <ul className="mt-8 flex flex-col gap-3">
               {collectieDefaults.map((c) => {
@@ -1224,14 +1223,14 @@ export default function AdminApp() {
                 ...editingCollectie,
                 applyToProducts: applyCollectieToProducts,
               })
-                .then(({ collectie }) => {
+                .then(({ collectie, productsUpdated }) => {
                   setCollectieDefaults((prev) =>
                     prev.map((x) =>
                       x.collectie === collectie.collectie ? collectie : x,
                     ),
                   )
                   setEditingCollectie(null)
-                  if (applyCollectieToProducts) {
+                  if (productsUpdated > 0 || applyCollectieToProducts) {
                     void loadAll()
                   }
                 })
@@ -1367,8 +1366,8 @@ export default function AdminApp() {
                 }
               />
               <span>
-                Ook doorzetten naar alle producten in deze collectie (overschrijft
-                montage/kleuren/beslag/agent-extra op die producten).
+                Ook kleuren, beslag en agent-extra doorzetten naar alle producten
+                in deze collectie. Montagetypes worden altijd doorgezet.
               </span>
             </label>
 
