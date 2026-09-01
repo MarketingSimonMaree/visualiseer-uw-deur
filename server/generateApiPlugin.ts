@@ -223,22 +223,27 @@ export function generateApiPlugin(): Plugin {
             if (!dbUrl) throw new Error('DATABASE_URL ontbreekt')
             const sql = neon(dbUrl)
             await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
+            await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS deur_groep TEXT NOT NULL DEFAULT 'binnen'`
             await sql`
               UPDATE montagetype_defs SET never_lever_handle = true
               WHERE id IN ('voordeur', 'voordeur-met-kozijn')
             `
             await sql`
+              UPDATE montagetype_defs SET deur_groep = 'buiten'
+              WHERE id IN ('voordeur', 'voordeur-met-kozijn', 'tuindeur', 'tuindeur-met-kozijn')
+            `
+            await sql`
               INSERT INTO montagetype_defs (
-                id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+                id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep, updated_at
               ) VALUES
                 ('tuindeur', 'Nieuwe tuindeur in bestaand kozijn',
                  'Achterdeur / tuindeur in uw bestaande kozijn',
                  'Replace only the garden/back door leaf (tuindeur/achterdeur) in the existing exterior frame. Keep the existing frame unchanged. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
-                 70, true, false, now()),
+                 70, true, false, 'buiten', now()),
                 ('tuindeur-met-kozijn', 'Nieuwe tuindeur mét nieuw kozijn',
                  'Achterdeur / tuindeur inclusief nieuw kozijn',
                  'Replace the garden/back door (tuindeur/achterdeur) including a new exterior frame that fits the opening. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
-                 80, true, false, now())
+                 80, true, false, 'buiten', now())
               ON CONFLICT (id) DO NOTHING
             `
             const mapM = (r: {
@@ -249,19 +254,34 @@ export function generateApiPlugin(): Plugin {
               sort_order: number
               actief: boolean
               never_lever_handle: boolean | null
-            }) => ({
-              id: r.id,
-              label: r.label,
-              hint: r.hint,
-              agentPrompt: r.agent_prompt,
-              sortOrder: r.sort_order,
-              actief: r.actief !== false,
-              neverLeverHandle: Boolean(r.never_lever_handle),
-            })
+              deur_groep: string | null
+            }) => {
+              const key = r.id.toLowerCase()
+              const inferred =
+                key.startsWith('voordeur') ||
+                key.startsWith('tuindeur') ||
+                key.startsWith('achterdeur') ||
+                key.includes('buiten')
+                  ? 'buiten'
+                  : 'binnen'
+              return {
+                id: r.id,
+                label: r.label,
+                hint: r.hint,
+                agentPrompt: r.agent_prompt,
+                sortOrder: r.sort_order,
+                actief: r.actief !== false,
+                neverLeverHandle: Boolean(r.never_lever_handle),
+                deurGroep:
+                  r.deur_groep === 'buiten' || r.deur_groep === 'binnen'
+                    ? r.deur_groep
+                    : inferred,
+              }
+            }
 
             if (req.method === 'GET') {
               const rows = await sql`
-                SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+                SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep
                 FROM montagetype_defs ORDER BY sort_order ASC, label ASC
               `
               sendJson(res, 200, {
@@ -281,6 +301,7 @@ export function generateApiPlugin(): Plugin {
                 actief?: boolean
                 sortOrder?: number
                 neverLeverHandle?: boolean
+                deurGroep?: 'binnen' | 'buiten'
               }
               const label = body.label?.trim()
               if (!label) {
@@ -297,14 +318,27 @@ export function generateApiPlugin(): Plugin {
                 sendJson(res, 400, { error: 'id is verplicht' })
                 return
               }
+              const deurGroep =
+                body.deurGroep === 'buiten' || body.deurGroep === 'binnen'
+                  ? body.deurGroep
+                  : mapM({
+                      id,
+                      label,
+                      hint: '',
+                      agent_prompt: '',
+                      sort_order: 0,
+                      actief: true,
+                      never_lever_handle: false,
+                      deur_groep: null,
+                    }).deurGroep
               if (req.method === 'POST') {
                 await sql`
                   INSERT INTO montagetype_defs (
-                    id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+                    id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep, updated_at
                   ) VALUES (
                     ${id}, ${label}, ${body.hint ?? ''}, ${body.agentPrompt ?? ''},
                     ${body.sortOrder ?? 100}, ${body.actief !== false},
-                    ${Boolean(body.neverLeverHandle)}, now()
+                    ${Boolean(body.neverLeverHandle)}, ${deurGroep}, now()
                   )
                   ON CONFLICT (id) DO UPDATE SET
                     label = EXCLUDED.label,
@@ -313,11 +347,12 @@ export function generateApiPlugin(): Plugin {
                     sort_order = EXCLUDED.sort_order,
                     actief = EXCLUDED.actief,
                     never_lever_handle = EXCLUDED.never_lever_handle,
+                    deur_groep = EXCLUDED.deur_groep,
                     updated_at = now()
                 `
               } else {
                 const existing = await sql`
-                  SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+                  SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep
                   FROM montagetype_defs WHERE id = ${id} LIMIT 1
                 `
                 const row = (existing as Array<Parameters<typeof mapM>[0]>)[0]
@@ -325,6 +360,10 @@ export function generateApiPlugin(): Plugin {
                   sendJson(res, 404, { error: 'Montagetype niet gevonden' })
                   return
                 }
+                const nextGroep =
+                  body.deurGroep === 'buiten' || body.deurGroep === 'binnen'
+                    ? body.deurGroep
+                    : mapM(row).deurGroep
                 await sql`
                   UPDATE montagetype_defs SET
                     label = ${body.label ?? row.label},
@@ -337,12 +376,13 @@ export function generateApiPlugin(): Plugin {
                         ? Boolean(body.neverLeverHandle)
                         : Boolean(row.never_lever_handle)
                     },
+                    deur_groep = ${nextGroep},
                     updated_at = now()
                   WHERE id = ${id}
                 `
               }
               const rows = await sql`
-                SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+                SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep
                 FROM montagetype_defs WHERE id = ${id} LIMIT 1
               `
               sendJson(res, 200, {

@@ -680,6 +680,7 @@ export default function AdminApp() {
                     sortOrder: 100,
                     actief: true,
                     neverLeverHandle: false,
+                    deurGroep: 'binnen',
                   })
                 }
               >
@@ -704,6 +705,7 @@ export default function AdminApp() {
                       </p>
                       <p className="text-xs text-[var(--colorDarkGray)]">
                         {m.id}
+                        {m.deurGroep === 'buiten' ? 'buiten' : 'binnen'}
                         {m.neverLeverHandle ? ' · geen klink' : ' · klink mag'}
                       </p>
                       <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
@@ -717,6 +719,8 @@ export default function AdminApp() {
                         setEditingMontage({
                           ...m,
                           neverLeverHandle: Boolean(m.neverLeverHandle),
+                          deurGroep:
+                            m.deurGroep === 'buiten' ? 'buiten' : 'binnen',
                         })
                       }
                     >
@@ -1093,6 +1097,7 @@ export default function AdminApp() {
                         sortOrder: 0,
                         actief: true,
                         neverLeverHandle: false,
+                        deurGroep: 'binnen' as const,
                       }),
                     )
                 ).map((m) => {
@@ -1251,6 +1256,7 @@ export default function AdminApp() {
                         sortOrder: 0,
                         actief: true,
                         neverLeverHandle: false,
+                        deurGroep: 'binnen' as const,
                       }),
                     )
                 ).map((m) => {
@@ -1598,6 +1604,7 @@ export default function AdminApp() {
                   actief: editingMontage.actief,
                   sortOrder: editingMontage.sortOrder,
                   neverLeverHandle: editingMontage.neverLeverHandle,
+                  deurGroep: editingMontage.deurGroep,
                 },
                 isNew || !editingMontage.id,
               )
@@ -1660,6 +1667,38 @@ export default function AdminApp() {
                   })
                 }
               />
+            </Field>
+            <Field label="Categorie">
+              <div className="mt-2 flex flex-col gap-2">
+                <label className="flex items-center gap-2 text-sm font-normal">
+                  <input
+                    type="radio"
+                    name="deur-groep"
+                    checked={editingMontage.deurGroep !== 'buiten'}
+                    onChange={() =>
+                      setEditingMontage({
+                        ...editingMontage,
+                        deurGroep: 'binnen',
+                      })
+                    }
+                  />
+                  Binnendeur
+                </label>
+                <label className="flex items-center gap-2 text-sm font-normal">
+                  <input
+                    type="radio"
+                    name="deur-groep"
+                    checked={editingMontage.deurGroep === 'buiten'}
+                    onChange={() =>
+                      setEditingMontage({
+                        ...editingMontage,
+                        deurGroep: 'buiten',
+                      })
+                    }
+                  />
+                  Buitendeur (voordeur / tuindeur)
+                </label>
+              </div>
             </Field>
             <label className="mt-4 flex items-center gap-2 text-sm">
               <input

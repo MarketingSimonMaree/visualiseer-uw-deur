@@ -136,6 +136,7 @@ export default function App() {
           content.montagetypes.map((m) => ({
             ...m,
             agentPrompt: '',
+            deurGroep: m.deurGroep === 'buiten' ? 'buiten' : 'binnen',
           })),
         )
       })

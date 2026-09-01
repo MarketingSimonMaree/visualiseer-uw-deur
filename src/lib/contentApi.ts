@@ -9,7 +9,7 @@ export type PublicCatalogusFilter = Pick<
 
 export type PublicMontagetype = Pick<
   MontagetypeDef,
-  'id' | 'label' | 'hint' | 'sortOrder' | 'actief' | 'neverLeverHandle'
+  'id' | 'label' | 'hint' | 'sortOrder' | 'actief' | 'neverLeverHandle' | 'deurGroep'
 >
 
 export type SiteContent = {

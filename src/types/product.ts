@@ -29,6 +29,8 @@ export interface Product {
   collectie: string
 }
 
+export type DeurGroep = 'binnen' | 'buiten'
+
 export interface MontagetypeDef {
   id: string
   label: string
@@ -38,6 +40,21 @@ export interface MontagetypeDef {
   actief: boolean
   /** Voordeuren: nooit een klink. Tuindeuren/binnendeuren: klink mag. */
   neverLeverHandle: boolean
+  /** Klant-UI: eerst binnen/buiten, daarna montage-opties. */
+  deurGroep: DeurGroep
+}
+
+export function inferDeurGroep(id: string): DeurGroep {
+  const key = id.toLowerCase()
+  if (
+    key.startsWith('voordeur') ||
+    key.startsWith('tuindeur') ||
+    key.startsWith('achterdeur') ||
+    key.includes('buiten')
+  ) {
+    return 'buiten'
+  }
+  return 'binnen'
 }
 
 export const MONTAGETYPE_LABELS: Record<string, string> = {
@@ -91,6 +108,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 10,
     actief: true,
     neverLeverHandle: false,
+    deurGroep: 'binnen',
   },
   {
     id: 'deur-met-kozijn',
@@ -100,6 +118,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 20,
     actief: true,
     neverLeverHandle: false,
+    deurGroep: 'binnen',
   },
   {
     id: 'taatsdeur',
@@ -109,6 +128,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 30,
     actief: true,
     neverLeverHandle: false,
+    deurGroep: 'binnen',
   },
   {
     id: 'schuifdeur',
@@ -118,6 +138,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 40,
     actief: true,
     neverLeverHandle: false,
+    deurGroep: 'binnen',
   },
   {
     id: 'voordeur',
@@ -127,6 +148,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 50,
     actief: true,
     neverLeverHandle: true,
+    deurGroep: 'buiten',
   },
   {
     id: 'voordeur-met-kozijn',
@@ -136,6 +158,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 60,
     actief: true,
     neverLeverHandle: true,
+    deurGroep: 'buiten',
   },
   {
     id: 'tuindeur',
@@ -145,6 +168,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 70,
     actief: true,
     neverLeverHandle: false,
+    deurGroep: 'buiten',
   },
   {
     id: 'tuindeur-met-kozijn',
@@ -154,6 +178,7 @@ export const FALLBACK_MONTAGETYPES: MontagetypeDef[] = [
     sortOrder: 80,
     actief: true,
     neverLeverHandle: false,
+    deurGroep: 'buiten',
   },
 ]
 

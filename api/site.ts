@@ -153,28 +153,34 @@ async function ensure(sql: {
   `
   await sql`ALTER TABLE catalogus_filters ADD COLUMN IF NOT EXISTS montagetype TEXT NOT NULL DEFAULT ''`
   await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
+  await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS deur_groep TEXT NOT NULL DEFAULT 'binnen'`
   await sql`
     UPDATE montagetype_defs
     SET never_lever_handle = true
     WHERE id IN ('voordeur', 'voordeur-met-kozijn')
   `
   await sql`
+    UPDATE montagetype_defs
+    SET deur_groep = 'buiten'
+    WHERE id IN ('voordeur', 'voordeur-met-kozijn', 'tuindeur', 'tuindeur-met-kozijn')
+  `
+  await sql`
     INSERT INTO montagetype_defs (
-      id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+      id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep, updated_at
     ) VALUES
       (
         'tuindeur',
         'Nieuwe tuindeur in bestaand kozijn',
         'Achterdeur / tuindeur in uw bestaande kozijn',
         'Replace only the garden/back door leaf (tuindeur/achterdeur) in the existing exterior frame. Keep the existing frame unchanged. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
-        70, true, false, now()
+        70, true, false, 'buiten', now()
       ),
       (
         'tuindeur-met-kozijn',
         'Nieuwe tuindeur mét nieuw kozijn',
         'Achterdeur / tuindeur inclusief nieuw kozijn',
         'Replace the garden/back door (tuindeur/achterdeur) including a new exterior frame that fits the opening. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
-        80, true, false, now()
+        80, true, false, 'buiten', now()
       )
     ON CONFLICT (id) DO NOTHING
   `
@@ -217,7 +223,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ORDER BY sort_order ASC, label ASC
         `,
         sql`
-          SELECT id, label, hint, sort_order, actief, never_lever_handle
+          SELECT id, label, hint, sort_order, actief, never_lever_handle, deur_groep
           FROM montagetype_defs
           WHERE actief = true
           ORDER BY sort_order ASC, label ASC
@@ -249,15 +255,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sort_order: number
           actief: boolean
           never_lever_handle: boolean | null
+          deur_groep: string | null
         }>
-      ).map((r) => ({
-        id: r.id,
-        label: r.label,
-        hint: r.hint,
-        sortOrder: r.sort_order,
-        actief: r.actief !== false,
-        neverLeverHandle: Boolean(r.never_lever_handle),
-      }))
+      ).map((r) => {
+        const id = r.id.toLowerCase()
+        const inferred =
+          id.startsWith('voordeur') ||
+          id.startsWith('tuindeur') ||
+          id.startsWith('achterdeur') ||
+          id.includes('buiten')
+            ? 'buiten'
+            : 'binnen'
+        return {
+          id: r.id,
+          label: r.label,
+          hint: r.hint,
+          sortOrder: r.sort_order,
+          actief: r.actief !== false,
+          neverLeverHandle: Boolean(r.never_lever_handle),
+          deurGroep:
+            r.deur_groep === 'buiten' || r.deur_groep === 'binnen'
+              ? r.deur_groep
+              : inferred,
+        }
+      })
       res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120')
       res.status(200).json({ situatie, filters, montagetypes })
     } catch (err) {

@@ -57,9 +57,27 @@ type Row = {
   sort_order: number
   actief: boolean
   never_lever_handle: boolean | null
+  deur_groep: string | null
+}
+
+function inferGroep(id: string): 'binnen' | 'buiten' {
+  const key = id.toLowerCase()
+  if (
+    key.startsWith('voordeur') ||
+    key.startsWith('tuindeur') ||
+    key.startsWith('achterdeur') ||
+    key.includes('buiten')
+  ) {
+    return 'buiten'
+  }
+  return 'binnen'
 }
 
 function mapRow(row: Row) {
+  const deurGroep =
+    row.deur_groep === 'buiten' || row.deur_groep === 'binnen'
+      ? row.deur_groep
+      : inferGroep(row.id)
   return {
     id: row.id,
     label: row.label,
@@ -68,6 +86,7 @@ function mapRow(row: Row) {
     sortOrder: row.sort_order,
     actief: row.actief !== false,
     neverLeverHandle: Boolean(row.never_lever_handle),
+    deurGroep,
   }
 }
 
@@ -96,18 +115,24 @@ async function ensure(sql: {
   (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>
 }) {
   await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
+  await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS deur_groep TEXT NOT NULL DEFAULT 'binnen'`
   await sql`
     UPDATE montagetype_defs
     SET never_lever_handle = true
     WHERE id IN ('voordeur', 'voordeur-met-kozijn')
   `
+  await sql`
+    UPDATE montagetype_defs
+    SET deur_groep = 'buiten'
+    WHERE id IN ('voordeur', 'voordeur-met-kozijn', 'tuindeur', 'tuindeur-met-kozijn')
+  `
   for (const s of SEED) {
     await sql`
       INSERT INTO montagetype_defs (
-        id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+        id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep, updated_at
       ) VALUES (
         ${s.id}, ${s.label}, ${s.hint}, ${s.agent_prompt}, ${s.sort_order},
-        true, ${s.never_lever_handle}, now()
+        true, ${s.never_lever_handle}, 'buiten', now()
       )
       ON CONFLICT (id) DO NOTHING
     `
@@ -131,7 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'GET') {
       const rows = await sql`
-        SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+        SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep
         FROM montagetype_defs
         ORDER BY sort_order ASC, label ASC
       `
@@ -150,6 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         actief?: boolean
         sortOrder?: number
         neverLeverHandle?: boolean
+        deurGroep?: 'binnen' | 'buiten'
       }
       const label = body.label?.trim()
       if (!label) {
@@ -161,15 +187,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).json({ error: 'id is verplicht' })
         return
       }
+      const deurGroep =
+        body.deurGroep === 'buiten' || body.deurGroep === 'binnen'
+          ? body.deurGroep
+          : inferGroep(id)
 
       if (req.method === 'POST') {
         await sql`
           INSERT INTO montagetype_defs (
-            id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+            id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep, updated_at
           ) VALUES (
             ${id}, ${label}, ${body.hint ?? ''}, ${body.agentPrompt ?? ''},
             ${body.sortOrder ?? 100}, ${body.actief !== false},
-            ${Boolean(body.neverLeverHandle)}, now()
+            ${Boolean(body.neverLeverHandle)}, ${deurGroep}, now()
           )
           ON CONFLICT (id) DO UPDATE SET
             label = EXCLUDED.label,
@@ -178,11 +208,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             sort_order = EXCLUDED.sort_order,
             actief = EXCLUDED.actief,
             never_lever_handle = EXCLUDED.never_lever_handle,
+            deur_groep = EXCLUDED.deur_groep,
             updated_at = now()
         `
       } else {
         const existing = await sql`
-          SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+          SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep
           FROM montagetype_defs WHERE id = ${id} LIMIT 1
         `
         const row = (existing as Row[])[0]
@@ -190,6 +221,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           res.status(404).json({ error: 'Montagetype niet gevonden' })
           return
         }
+        const nextGroep =
+          body.deurGroep === 'buiten' || body.deurGroep === 'binnen'
+            ? body.deurGroep
+            : row.deur_groep === 'buiten' || row.deur_groep === 'binnen'
+              ? row.deur_groep
+              : inferGroep(id)
         await sql`
           UPDATE montagetype_defs SET
             label = ${body.label ?? row.label},
@@ -202,13 +239,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ? Boolean(body.neverLeverHandle)
                 : Boolean(row.never_lever_handle)
             },
+            deur_groep = ${nextGroep},
             updated_at = now()
           WHERE id = ${id}
         `
       }
 
       const updated = await sql`
-        SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+        SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep
         FROM montagetype_defs WHERE id = ${id} LIMIT 1
       `
       res.status(200).json({
