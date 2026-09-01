@@ -2,7 +2,7 @@ import type { SituatieTekst, CatalogusFilter } from './adminApi'
 
 export type PublicCatalogusFilter = Pick<
   CatalogusFilter,
-  'id' | 'label' | 'montagetype' | 'sortOrder' | 'productIds'
+  'id' | 'label' | 'sortOrder' | 'productIds'
 >
 
 export type SiteContent = {

@@ -271,10 +271,7 @@ export async function upsertAdminFilter(
   const label = body.label?.trim()
   if (!label) throw Object.assign(new Error('label is verplicht'), { statusCode: 400 })
   const montagetype = body.montagetype?.trim() ?? ''
-  if (!montagetype) {
-    throw Object.assign(new Error('montagetype is verplicht'), { statusCode: 400 })
-  }
-  const id = slugify(body.id || `${montagetype}-${label}`)
+  const id = slugify(body.id || label)
   if (!id) throw Object.assign(new Error('id is verplicht'), { statusCode: 400 })
 
   if (isNew) {

@@ -304,11 +304,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return
         }
         const montagetype = body.montagetype?.trim() ?? ''
-        if (!montagetype) {
-          res.status(400).json({ error: 'montagetype is verplicht' })
-          return
-        }
-        const id = slugify(body.id || `${montagetype}-${label}`)
+        const id = slugify(body.id || label)
         if (!id) {
           res.status(400).json({ error: 'id is verplicht' })
           return

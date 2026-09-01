@@ -572,9 +572,9 @@ export default function AdminApp() {
             </p>
             <ul className="mt-8 flex flex-col gap-3">
               {collectieDefaults.map((c) => {
-                const productCount = producten.filter(
-                  (p) => p.collectie === c.collectie,
-                ).length
+                const collectieProducten = producten
+                  .filter((p) => p.collectie === c.collectie)
+                  .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
                 return (
                   <li
                     key={c.collectie}
@@ -584,7 +584,7 @@ export default function AdminApp() {
                       <div>
                         <p className="font-semibold">{c.collectie}</p>
                         <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
-                          {productCount} producten ·{' '}
+                          {collectieProducten.length} producten ·{' '}
                           {c.montagetypes.length
                             ? c.montagetypes
                                 .map((id) => MONTAGETYPE_LABELS[id as Montagetype] ?? id)
@@ -614,6 +614,37 @@ export default function AdminApp() {
                         Bewerken
                       </button>
                     </div>
+                    {collectieProducten.length > 0 && (
+                      <ul className="mt-4 divide-y divide-[var(--colorBorder)] rounded-lg border border-[var(--colorBorder)]">
+                        {collectieProducten.map((p) => (
+                          <li
+                            key={p.id}
+                            className="flex items-center gap-3 px-3 py-2"
+                          >
+                            <div className="h-12 w-9 flex-shrink-0 overflow-hidden rounded bg-[#eee]">
+                              {p.afbeeldingUrl ? (
+                                <img
+                                  src={p.afbeeldingUrl}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : null}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">
+                                {p.naam}
+                              </p>
+                              {!p.actief && (
+                                <p className="text-xs text-[var(--colorDarkGray)]">
+                                  inactief
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {c.agentExtra && (
                       <p className="mt-3 rounded-lg bg-[#f7f7f7] p-3 text-sm text-[var(--colorDarkGray)]">
                         Agent: {c.agentExtra}
@@ -881,7 +912,6 @@ export default function AdminApp() {
           <AdminFiltersTab
             filters={catalogusFilters}
             producten={producten}
-            montages={montages}
             onChange={setCatalogusFilters}
             onError={setError}
           />

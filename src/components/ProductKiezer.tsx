@@ -39,12 +39,10 @@ export function ProductKiezer({
   )
 
   const zichtbareFilters = useMemo(() => {
-    return filters.filter(
-      (f) =>
-        f.montagetype === montagetype &&
-        gefilterdOpType.some((p) => f.productIds.includes(p.id)),
+    return filters.filter((f) =>
+      gefilterdOpType.some((p) => f.productIds.includes(p.id)),
     )
-  }, [filters, gefilterdOpType, montagetype])
+  }, [filters, gefilterdOpType])
 
   useEffect(() => {
     if (filterId !== 'alle' && !zichtbareFilters.some((f) => f.id === filterId)) {

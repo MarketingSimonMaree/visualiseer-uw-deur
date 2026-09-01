@@ -5,11 +5,6 @@ import {
   type AdminProduct,
   type CatalogusFilter,
 } from '../lib/adminApi'
-import {
-  MONTAGETYPE_LABELS,
-  type Montagetype,
-  type MontagetypeDef,
-} from '../types/product'
 
 function Field({
   label,
@@ -54,24 +49,9 @@ function Modal({
   )
 }
 
-function productTypes(p: AdminProduct): string[] {
-  if (p.montagetypes?.length) return p.montagetypes.map(String)
-  return p.montagetype ? [String(p.montagetype)] : []
-}
-
-function montageLabel(
-  id: string,
-  montages: MontagetypeDef[],
-): string {
-  const fromDb = montages.find((m) => m.id === id)
-  if (fromDb?.label) return fromDb.label
-  return MONTAGETYPE_LABELS[id as Montagetype] ?? id
-}
-
 interface Props {
   filters: CatalogusFilter[]
   producten: AdminProduct[]
-  montages: MontagetypeDef[]
   onChange: (next: CatalogusFilter[]) => void
   onError: (msg: string) => void
 }
@@ -79,7 +59,6 @@ interface Props {
 export function AdminFiltersTab({
   filters,
   producten,
-  montages,
   onChange,
   onError,
 }: Props) {
@@ -87,25 +66,35 @@ export function AdminFiltersTab({
   const [isNew, setIsNew] = useState(false)
   const [productQuery, setProductQuery] = useState('')
 
-  const montageOpties = useMemo(() => {
-    const active = montages.filter((m) => m.actief !== false)
-    if (active.length) return active
-    return (Object.keys(MONTAGETYPE_LABELS) as Montagetype[]).map((id) => ({
-      id,
-      label: MONTAGETYPE_LABELS[id],
-      hint: '',
-      agentPrompt: '',
-      sortOrder: 0,
-      actief: true,
-    }))
-  }, [montages])
+  const collecties = useMemo(() => {
+    const names = new Set<string>()
+    for (const p of producten) {
+      const name = p.collectie?.trim()
+      if (name) names.add(name)
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, 'nl'))
+  }, [producten])
+
+  const actieveProducten = useMemo(
+    () => producten.filter((p) => p.actief !== false),
+    [producten],
+  )
+
+  const productenInCollectie = useMemo(() => {
+    const map = new Map<string, AdminProduct[]>()
+    for (const p of actieveProducten) {
+      const name = p.collectie?.trim()
+      if (!name) continue
+      const list = map.get(name) ?? []
+      list.push(p)
+      map.set(name, list)
+    }
+    return map
+  }, [actieveProducten])
 
   const zichtbareProducten = useMemo(() => {
-    if (!editing?.montagetype) return []
     const q = productQuery.trim().toLowerCase()
-    return producten
-      .filter((p) => p.actief !== false)
-      .filter((p) => productTypes(p).includes(editing.montagetype))
+    return actieveProducten
       .filter((p) => {
         if (!q) return true
         return (
@@ -115,7 +104,7 @@ export function AdminFiltersTab({
         )
       })
       .sort((a, b) => a.naam.localeCompare(b.naam, 'nl'))
-  }, [producten, productQuery, editing?.montagetype])
+  }, [actieveProducten, productQuery])
 
   function openNew() {
     setIsNew(true)
@@ -123,25 +112,38 @@ export function AdminFiltersTab({
     setEditing({
       id: '',
       label: '',
-      montagetype: String(montageOpties[0]?.id ?? 'deur-bestaand-kozijn'),
+      montagetype: '',
       sortOrder: 100,
       actief: true,
       productIds: [],
     })
   }
 
-  function setMontagetype(next: string) {
+  function collectieStatus(name: string): 'all' | 'some' | 'none' {
+    const ids = (productenInCollectie.get(name) ?? []).map((p) => p.id)
+    if (!ids.length || !editing) return 'none'
+    const selected = ids.filter((id) => editing.productIds.includes(id))
+    if (selected.length === 0) return 'none'
+    if (selected.length === ids.length) return 'all'
+    return 'some'
+  }
+
+  function toggleCollectie(name: string) {
     if (!editing) return
-    const allowed = new Set(
-      producten
-        .filter((p) => productTypes(p).includes(next))
-        .map((p) => p.id),
-    )
-    setEditing({
-      ...editing,
-      montagetype: next,
-      productIds: editing.productIds.filter((id) => allowed.has(id)),
-    })
+    const ids = (productenInCollectie.get(name) ?? []).map((p) => p.id)
+    if (!ids.length) return
+    const status = collectieStatus(name)
+    if (status === 'all') {
+      const remove = new Set(ids)
+      setEditing({
+        ...editing,
+        productIds: editing.productIds.filter((id) => !remove.has(id)),
+      })
+      return
+    }
+    const next = new Set(editing.productIds)
+    for (const id of ids) next.add(id)
+    setEditing({ ...editing, productIds: [...next] })
   }
 
   function submit(e: FormEvent) {
@@ -150,15 +152,11 @@ export function AdminFiltersTab({
       onError('Label is verplicht')
       return
     }
-    if (!editing.montagetype) {
-      onError('Montagetype is verplicht')
-      return
-    }
     void saveAdminFilter(
       {
         id: editing.id || undefined,
         label: editing.label.trim(),
-        montagetype: editing.montagetype,
+        montagetype: '',
         sortOrder: editing.sortOrder,
         actief: editing.actief,
         productIds: editing.productIds,
@@ -187,7 +185,8 @@ export function AdminFiltersTab({
             <span className="gold">Filters</span>
           </h1>
           <p className="mt-1 text-[var(--colorDarkGray)]">
-            Per montagetype: kies welke deuren bij een filter horen.
+            Voeg collecties of losse deuren toe. Filters werken over alle
+            montagetypes heen.
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={openNew}>
@@ -212,7 +211,6 @@ export function AdminFiltersTab({
                   )}
                 </p>
                 <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
-                  {montageLabel(f.montagetype, montages)} ·{' '}
                   {f.productIds.length} producten · volgorde {f.sortOrder}
                 </p>
               </div>
@@ -223,7 +221,7 @@ export function AdminFiltersTab({
                   onClick={() => {
                     setIsNew(false)
                     setProductQuery('')
-                    setEditing({ ...f })
+                    setEditing({ ...f, montagetype: f.montagetype ?? '' })
                   }}
                 >
                   Bewerken
@@ -254,7 +252,7 @@ export function AdminFiltersTab({
         ))}
         {filters.length === 0 && (
           <li className="text-[var(--colorDarkGray)]">
-            Nog geen filters. Maak er een aan en vink producten aan.
+            Nog geen filters. Voeg een collectie of producten toe.
           </li>
         )}
       </ul>
@@ -275,21 +273,6 @@ export function AdminFiltersTab({
                 }
                 placeholder="Bijv. Steel look"
               />
-            </Field>
-
-            <Field label="Montagetype">
-              <select
-                className="field-input w-full"
-                required
-                value={editing.montagetype}
-                onChange={(e) => setMontagetype(e.target.value)}
-              >
-                {montageOpties.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
             </Field>
 
             <Field label="Volgorde">
@@ -316,6 +299,41 @@ export function AdminFiltersTab({
               Actief in de catalogus
             </label>
 
+            <Field label="Collecties toevoegen">
+              <div className="flex flex-wrap gap-2">
+                {collecties.map((name) => {
+                  const status = collectieStatus(name)
+                  const count = productenInCollectie.get(name)?.length ?? 0
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => toggleCollectie(name)}
+                      className={`rounded-full border px-3 py-1.5 text-sm font-medium ${
+                        status === 'all'
+                          ? 'border-[var(--colorPrimary)] bg-[var(--colorPrimary)] text-white'
+                          : status === 'some'
+                            ? 'border-[var(--colorPrimary)] bg-[#fdf6f7] text-[var(--colorPrimary)]'
+                            : 'border-[var(--colorBorder)] bg-white'
+                      }`}
+                    >
+                      {name} ({count})
+                      {status === 'some' ? ' · deels' : ''}
+                    </button>
+                  )
+                })}
+                {collecties.length === 0 && (
+                  <p className="text-sm text-[var(--colorDarkGray)]">
+                    Nog geen collecties bij producten.
+                  </p>
+                )}
+              </div>
+              <p className="mt-2 text-xs text-[var(--colorDarkGray)]">
+                Klik een collectie om alle deuren toe te voegen. Daarna kun je
+                individueel uitzetten.
+              </p>
+            </Field>
+
             <Field label="Producten in deze filter">
               <input
                 type="search"
@@ -323,15 +341,10 @@ export function AdminFiltersTab({
                 placeholder="Zoek producten…"
                 value={productQuery}
                 onChange={(e) => setProductQuery(e.target.value)}
-                disabled={!editing.montagetype}
               />
-              {!editing.montagetype ? (
+              {zichtbareProducten.length === 0 ? (
                 <p className="text-sm text-[var(--colorDarkGray)]">
-                  Kies eerst een montagetype.
-                </p>
-              ) : zichtbareProducten.length === 0 ? (
-                <p className="text-sm text-[var(--colorDarkGray)]">
-                  Geen actieve producten voor dit montagetype.
+                  Geen actieve producten gevonden.
                 </p>
               ) : (
                 <div className="max-h-80 overflow-y-auto rounded-lg border border-[var(--colorBorder)] p-2">
@@ -368,8 +381,11 @@ export function AdminFiltersTab({
                               }}
                             />
                           </div>
-                          <span className="line-clamp-2 px-2 py-1.5 text-xs font-medium leading-snug">
+                          <span className="line-clamp-2 px-2 pt-1.5 text-xs font-medium leading-snug">
                             {p.naam}
+                          </span>
+                          <span className="truncate px-2 pb-1.5 text-[10px] text-[var(--colorDarkGray)]">
+                            {p.collectie}
                           </span>
                         </label>
                       )
