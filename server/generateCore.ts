@@ -302,16 +302,20 @@ export async function runGeneration(
         }
       }
 
-      if (!beslagId) beslagId = 'deurkruk-standaard'
+      if (!beslagId) {
+        beslagId = neverLeverHandle ? null : 'deurkruk-standaard'
+      }
 
-      const beslagRows = await sql`
-        SELECT agent_prompt FROM beslag_defs
-        WHERE id = ${beslagId} AND actief = true
-        LIMIT 1
-      `
-      beslagAgentPrompt = (
-        beslagRows as Array<{ agent_prompt: string }>
-      )[0]?.agent_prompt?.trim()
+      if (beslagId && !neverLeverHandle) {
+        const beslagRows = await sql`
+          SELECT agent_prompt FROM beslag_defs
+          WHERE id = ${beslagId} AND actief = true
+          LIMIT 1
+        `
+        beslagAgentPrompt = (
+          beslagRows as Array<{ agent_prompt: string }>
+        )[0]?.agent_prompt?.trim()
+      }
       agentExtra = extra || undefined
     } catch {
       // fallback op defaults hierboven

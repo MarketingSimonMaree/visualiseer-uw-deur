@@ -148,16 +148,21 @@ async function resolveAgentGuidance(opts: {
       }
     }
 
-    if (!beslagId) beslagId = 'deurkruk-standaard'
+    if (!beslagId) {
+      beslagId = neverLeverHandle ? null : 'deurkruk-standaard'
+    }
 
-    const beslagRows = await sql`
-      SELECT agent_prompt FROM beslag_defs
-      WHERE id = ${beslagId} AND actief = true
-      LIMIT 1
-    `
-    const beslag =
-      (beslagRows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim() ||
-      fallbackBeslag
+    let beslag = fallbackBeslag
+    if (beslagId && !neverLeverHandle) {
+      const beslagRows = await sql`
+        SELECT agent_prompt FROM beslag_defs
+        WHERE id = ${beslagId} AND actief = true
+        LIMIT 1
+      `
+      beslag =
+        (beslagRows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim() ||
+        fallbackBeslag
+    }
 
     return { montage, beslag, extra: agentExtra, neverLeverHandle }
   } catch {
@@ -182,11 +187,11 @@ function buildPrompt(
   },
 ) {
   const neverLever = guidance.neverLeverHandle
-  const beslag =
-    guidance.beslag ||
-    (neverLever
-      ? 'Hardware: exterior front-door hardware only — round/oval knob or a pull bar/stang if the product shows one. NEVER a lever deurkruk/klink.'
-      : 'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.')
+  // Bij voordeur wint de knop-regel altijd — negeer DB-beslagprompts zoals deurkruk-standaard.
+  const beslag = neverLever
+    ? 'Hardware type (mandatory): round/oval exterior door knob (deurknop). NEVER a lever deurkruk/klink. Pull bar/stang only if Image 2 already shows one.'
+    : guidance.beslag ||
+      'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.'
 
   const beslagKleurMap: Record<string, string> = {
     'beslag-mat-zwart': 'matte black / powder-coated black metal',
@@ -202,9 +207,11 @@ function buildPrompt(
     : ''
   const beslagKleurRules = beslagKleurPrompt
     ? [
-        'HARDWARE COLOUR (critical — overrides Image 1 and Image 2 hardware colours):',
+        'HARDWARE COLOUR (critical — overrides Image 1 and Image 2 hardware colours only, NOT hardware type):',
         `ALL door hardware must be finished in ${beslagKleurPrompt}.`,
-        'This includes EVERY metal fitting on the door: door knob or lever, rose/escutcheon (rozet), letterbox/mail slot (brievenbus), pull bar/stang, hinges if visible on the door face, peephole ring, and any other door furniture.',
+        neverLever
+          ? 'This includes EVERY metal fitting on the door: the round/oval door knob, rose/escutcheon (rozet), letterbox/mail slot (brievenbus), pull bar/stang if present, hinges if visible on the door face, peephole ring, and any other door furniture. Do NOT introduce a lever handle when applying this colour.'
+          : 'This includes EVERY metal fitting on the door: door handle, rose/escutcheon (rozet), letterbox/mail slot (brievenbus), pull bar/stang, hinges if visible on the door face, peephole ring, and any other door furniture.',
         'Do not mix hardware colours. Do not keep chrome/brass/black from the product photo if a different hardware colour was requested.',
       ].join(' ')
     : ''
@@ -212,7 +219,7 @@ function buildPrompt(
   return [
     'Photorealistic photo edit of a real room.',
     'Image 1 = customer room photo (base). Keep walls, floor, ceiling, lighting, furniture, stairs, switches, keypad, camera angle and perspective EXACTLY unchanged — EXCEPT the door itself, which must match Image 2.',
-    'Image 2 = product reference for the NEW door design only. Image 2 is the authority for panels, glass/no-glass, and hardware style.',
+    'Image 2 = product reference for the NEW door design only. Image 2 is the authority for panels, glass/no-glass, and (except on front doors) hardware style.',
     'Replace only the door leaf (and frame only if mounting type requires a new frame) so it fits the existing opening naturally.',
     `Door model: ${body.productNaam}.`,
     `Requested colour: ${body.kleur}. Apply this colour to the door leaf/frame realistically; keep panel and glass/no-glass layout of the model (Image 2).`,
@@ -227,12 +234,12 @@ function buildPrompt(
     '5. From Image 2, copy only the door design: proportions, panels, frame profile, and material look. Ignore its open/closed state. Follow the hardware guidance for handle/pull type.',
     neverLever
       ? [
-          'FRONT DOOR HARDWARE (critical — exterior voordeur / entree):',
-          'NEVER use an interior lever handle / deurkruk / klink.',
+          'FRONT DOOR HARDWARE (critical — exterior voordeur / entree — OVERRIDES all other hardware guidance, Image 2, and colour notes):',
+          'NEVER use an interior lever handle / deurkruk / klink — not even if Image 2 shows one, and not even if other prompt text mentions a lever.',
           'Dutch front doors do not get a lever klink.',
-          'Use ONLY exterior-appropriate hardware: a round/oval door knob (deurknop) OR a pull bar/stang IF Image 2 (product) already shows that hardware.',
-          'If Image 2 shows a knob, use a knob. If Image 2 shows a vertical or horizontal pull bar/stang, use that same style.',
-          'If Image 2 hardware is unclear, prefer a round door knob — never a lever klink.',
+          'Use ONLY a round/oval door knob (deurknop), or a pull bar/stang ONLY if Image 2 already clearly shows a pull bar/stang.',
+          'If Image 2 shows a lever/klink, REPLACE it with a round door knob.',
+          'Default when unsure: round door knob — never a lever klink.',
         ].join(' ')
       : '',
     beslagKleurRules,
