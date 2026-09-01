@@ -10,12 +10,14 @@ import {
 } from '../src/config.ts'
 import { DEFAULT_AGENT_PROMPTS, type Montagetype } from '../src/types/product.ts'
 import { buildGeneratePrompt } from '../src/lib/prompt.ts'
+import { beslagKleurPromptLabel } from '../src/data/beslagKleuren.ts'
 
 export type GenBody = {
   roomImageBase64: string
   productImageUrl: string
   productNaam: string
   kleur: string
+  beslagKleur?: string
   montagetype: string
   productId?: string
   cacheKey?: string
@@ -327,6 +329,9 @@ export async function runGeneration(
       beslagAgentPrompt,
       agentExtra,
       neverLeverHandle,
+      beslagKleurPrompt: body.beslagKleur
+        ? beslagKleurPromptLabel(body.beslagKleur)
+        : undefined,
     }),
     size: IMAGE_SIZE,
     quality: IMAGE_QUALITY,

@@ -31,6 +31,8 @@ export function buildGeneratePrompt(opts: {
   agentExtra?: string
   /** true = voordeur-achtig (geen klink). false = tuindeur/binnen (klink mag). */
   neverLeverHandle?: boolean
+  /** Engelse omschrijving van gekozen beslagkleur, of leeg. */
+  beslagKleurPrompt?: string
 }): string {
   const neverLever =
     opts.neverLeverHandle === true ||
@@ -45,6 +47,15 @@ export function buildGeneratePrompt(opts: {
       ? 'Hardware: exterior front-door hardware only — round/oval knob or a pull bar/stang if the product shows one. NEVER a lever deurkruk/klink.'
       : 'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.')
   const extra = opts.agentExtra?.trim()
+  const beslagKleur = opts.beslagKleurPrompt?.trim()
+  const beslagKleurRules = beslagKleur
+    ? [
+        'HARDWARE COLOUR (critical — overrides Image 1 and Image 2 hardware colours):',
+        `ALL door hardware must be finished in ${beslagKleur}.`,
+        'This includes EVERY metal fitting on the door: door knob or lever, rose/escutcheon (rozet), letterbox/mail slot (brievenbus), pull bar/stang, hinges if visible on the door face, peephole ring, and any other door furniture.',
+        'Do not mix hardware colours. Do not keep chrome/brass/black from the product photo if a different hardware colour was requested.',
+      ].join(' ')
+    : ''
 
   return [
     'Photorealistic photo edit of a real room.',
@@ -58,6 +69,7 @@ export function buildGeneratePrompt(opts: {
     extra ? `Additional product guidance: ${extra}` : '',
     HARD_VISUAL_RULES,
     neverLever ? FRONT_DOOR_HARD_RULES : '',
+    beslagKleurRules,
     'No people, no text overlays, no logos, no watermarks.',
     'Output one photorealistic photo.',
   ]

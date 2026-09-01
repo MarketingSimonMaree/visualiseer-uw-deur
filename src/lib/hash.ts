@@ -9,14 +9,17 @@ export async function sha256Hex(input: Blob | string): Promise<string> {
 }
 
 /** Bump bij harde promptwijzigingen zodat oude cache niet terugkomt. */
-export const PROMPT_CACHE_VERSION = 'v6-tuindeur-montages'
+export const PROMPT_CACHE_VERSION = 'v7-beslag-kleur'
 
-/** Cache-sleutel: foto + deur + kleur (+ promptversie). */
+/** Cache-sleutel: foto + deur + deurkleur + beslagkleur (+ promptversie). */
 export async function buildCacheKey(
   roomBlob: Blob,
   productId: string,
   kleur: string,
+  beslagKleur = '',
 ): Promise<string> {
   const photoHash = await sha256Hex(roomBlob)
-  return sha256Hex(`${PROMPT_CACHE_VERSION}|${photoHash}|${productId}|${kleur}`)
+  return sha256Hex(
+    `${PROMPT_CACHE_VERSION}|${photoHash}|${productId}|${kleur}|${beslagKleur}`,
+  )
 }

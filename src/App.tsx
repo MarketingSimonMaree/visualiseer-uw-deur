@@ -28,6 +28,7 @@ import {
   type PublicCatalogusFilter,
 } from './lib/contentApi'
 import type { SituatieTekst } from './lib/adminApi'
+import { BESLAG_KLEUREN } from './data/beslagKleuren'
 import type {
   AppStep,
   GeneratieResultaat,
@@ -58,6 +59,11 @@ function parseDataUrl(raw: string): { base64: string; mime: string } {
   return { mime: 'image/png', base64: raw }
 }
 
+function kleurVoorMail(deurKleur: string, beslagId: string | null | undefined) {
+  const beslag = BESLAG_KLEUREN.find((b) => b.id === beslagId)?.naam
+  return beslag ? `${deurKleur} · beslag ${beslag}` : deurKleur
+}
+
 async function roomImageForMail(foto: KamerFoto): Promise<{
   roomImageBase64: string
   roomMimeType: string
@@ -78,6 +84,7 @@ export default function App() {
   const [foto, setFoto] = useState<KamerFoto | null>(null)
   const [product, setProduct] = useState<Product | null>(null)
   const [kleur, setKleur] = useState<string | null>(null)
+  const [beslagKleur, setBeslagKleur] = useState<string | null>(null)
 
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
@@ -170,7 +177,7 @@ export default function App() {
 
   const runGenerate = useCallback(
     async (opts: { isRetry: boolean; delivery?: DeliveryChoice }) => {
-      if (!foto || !product || !kleur || !montagetype) return
+      if (!foto || !product || !kleur || !beslagKleur || !montagetype) return
 
       if (isDailyLimitReached()) {
         setGenError(
@@ -194,7 +201,12 @@ export default function App() {
       goTo('resultaat')
 
       try {
-        const cacheKey = await buildCacheKey(foto.blob, product.id, kleur)
+        const cacheKey = await buildCacheKey(
+          foto.blob,
+          product.id,
+          kleur,
+          beslagKleur,
+        )
 
         if (!opts.isRetry) {
           const cached = await cacheGet(cacheKey)
@@ -206,6 +218,7 @@ export default function App() {
               productId: product.id,
               productNaam: product.naam,
               kleur,
+              beslagKleur,
               createdAt: Date.now(),
               fromCache: true,
               isRetry: false,
@@ -224,7 +237,7 @@ export default function App() {
                 bron: 'mail' as const,
                 productId: product.id,
                 productNaam: product.naam,
-                kleur,
+                kleur: kleurVoorMail(kleur, beslagKleur),
                 montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
                 imageBase64: mimeMatch?.[2] ?? cached,
                 mimeType: mimeMatch?.[1] ?? 'image/png',
@@ -262,6 +275,7 @@ export default function App() {
           productId: product.id,
           productNaam: product.naam,
           kleur,
+          beslagKleur,
           montagetype,
           cacheKey,
         })
@@ -287,6 +301,7 @@ export default function App() {
           productId: product.id,
           productNaam: product.naam,
           kleur,
+          beslagKleur,
           createdAt: Date.now(),
           fromCache: false,
           isRetry: opts.isRetry,
@@ -305,7 +320,7 @@ export default function App() {
               bron: 'mail',
               productId: product.id,
               productNaam: product.naam,
-              kleur,
+              kleur: kleurVoorMail(kleur, beslagKleur),
               montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
               imageBase64: data.imageBase64,
               mimeType: mime,
@@ -336,7 +351,7 @@ export default function App() {
         setGenerating(false)
       }
     },
-    [foto, product, kleur, montagetype, goTo, delivery],
+    [foto, product, kleur, beslagKleur, montagetype, goTo, delivery],
   )
 
   function startGenerateFlow() {
@@ -409,6 +424,7 @@ export default function App() {
               onSelect={(p) => {
                 setProduct(p)
                 setKleur(null)
+                setBeslagKleur(null)
               }}
               onBack={() => goTo('plan')}
               onContinue={() => goTo('kleur')}
@@ -421,6 +437,8 @@ export default function App() {
             product={product}
             value={kleur}
             onChange={setKleur}
+            beslagKleur={beslagKleur}
+            onBeslagKleurChange={setBeslagKleur}
             onBack={() => goTo('catalogus')}
             generating={generating}
             remaining={remaining}
@@ -436,6 +454,7 @@ export default function App() {
               <GeneratieVoortgang
                 product={product}
                 kleur={kleur}
+                beslagKleur={beslagKleur}
                 roomPreviewUrl={foto.previewUrl}
                 forMail={delivery?.mode === 'mail'}
               />
@@ -513,7 +532,10 @@ export default function App() {
                     bron: 'offerte',
                     productId: product.id,
                     productNaam: product.naam,
-                    kleur: actief.kleur,
+                    kleur: kleurVoorMail(
+                      actief.kleur,
+                      actief.beslagKleur ?? beslagKleur,
+                    ),
                     montagetype:
                       MONTAGETYPE_LABELS[montagetype] ?? montagetype,
                     imageBase64: mimeMatch.base64,

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { Product } from '../types/product'
+import { BESLAG_KLEUREN } from '../data/beslagKleuren'
 
 interface Props {
   product: Product
   kleur: string
+  beslagKleur?: string | null
   roomPreviewUrl: string
   forMail?: boolean
 }
@@ -18,10 +20,13 @@ const TIPS = [
 export function GeneratieVoortgang({
   product,
   kleur,
+  beslagKleur,
   roomPreviewUrl,
   forMail,
 }: Props) {
   const [tipIndex, setTipIndex] = useState(0)
+  const beslagNaam =
+    BESLAG_KLEUREN.find((b) => b.id === beslagKleur)?.naam ?? null
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -62,7 +67,10 @@ export function GeneratieVoortgang({
           </div>
           <div className="border-t border-[var(--colorGray)] px-3 py-2">
             <p className="font-semibold">{product.naam}</p>
-            <p className="text-sm text-[var(--colorDarkGray)]">{kleur}</p>
+            <p className="text-sm text-[var(--colorDarkGray)]">
+              {kleur}
+              {beslagNaam ? ` · beslag ${beslagNaam}` : ''}
+            </p>
           </div>
         </div>
       </div>

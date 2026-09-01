@@ -202,6 +202,8 @@ export interface GeneratieResultaat {
   productId: string
   productNaam: string
   kleur: string
+  /** Id van gekozen beslagkleur (bijv. beslag-mat-zwart). */
+  beslagKleur?: string
   createdAt: number
   fromCache: boolean
   isRetry: boolean

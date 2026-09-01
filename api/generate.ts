@@ -20,6 +20,7 @@ type GenBody = {
   productId?: string
   productNaam?: string
   kleur?: string
+  beslagKleur?: string
   montagetype?: string
 }
 
@@ -170,7 +171,9 @@ async function resolveAgentGuidance(opts: {
 }
 
 function buildPrompt(
-  body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'montagetype'>>,
+  body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'montagetype'>> & {
+    beslagKleur?: string
+  },
   guidance: {
     montage: string
     beslag: string
@@ -184,6 +187,27 @@ function buildPrompt(
     (neverLever
       ? 'Hardware: exterior front-door hardware only — round/oval knob or a pull bar/stang if the product shows one. NEVER a lever deurkruk/klink.'
       : 'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.')
+
+  const beslagKleurMap: Record<string, string> = {
+    'beslag-mat-zwart': 'matte black / powder-coated black metal',
+    'beslag-antraciet': 'anthracite / dark grey metal',
+    'beslag-rvs': 'brushed stainless steel / silver metal',
+    'beslag-chroom': 'polished chrome',
+    'beslag-messing': 'brushed brass / gold-toned metal',
+    'beslag-brons': 'bronze / antique bronze metal',
+    'beslag-wit': 'white painted / white powder-coated metal',
+  }
+  const beslagKleurPrompt = body.beslagKleur
+    ? (beslagKleurMap[body.beslagKleur] ?? body.beslagKleur)
+    : ''
+  const beslagKleurRules = beslagKleurPrompt
+    ? [
+        'HARDWARE COLOUR (critical — overrides Image 1 and Image 2 hardware colours):',
+        `ALL door hardware must be finished in ${beslagKleurPrompt}.`,
+        'This includes EVERY metal fitting on the door: door knob or lever, rose/escutcheon (rozet), letterbox/mail slot (brievenbus), pull bar/stang, hinges if visible on the door face, peephole ring, and any other door furniture.',
+        'Do not mix hardware colours. Do not keep chrome/brass/black from the product photo if a different hardware colour was requested.',
+      ].join(' ')
+    : ''
 
   return [
     'Photorealistic photo edit of a real room.',
@@ -211,6 +235,7 @@ function buildPrompt(
           'If Image 2 hardware is unclear, prefer a round door knob — never a lever klink.',
         ].join(' ')
       : '',
+    beslagKleurRules,
     'No people, no text overlays, no logos, no watermarks.',
     'Output one photorealistic photo.',
   ]
@@ -297,6 +322,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         {
           productNaam: body.productNaam,
           kleur: body.kleur,
+          beslagKleur: body.beslagKleur,
           montagetype,
         },
         guidance,

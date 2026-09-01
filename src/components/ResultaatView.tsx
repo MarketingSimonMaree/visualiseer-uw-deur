@@ -4,6 +4,7 @@ import { downloadResultaat } from '../lib/download'
 import type { GeneratieResultaat, Product } from '../types/product'
 import { ResultaatStrip } from './ResultaatStrip'
 import type { KlantGegevens } from './KlantGegevensForm'
+import { BESLAG_KLEUREN } from '../data/beslagKleuren'
 
 interface Props {
   resultaat: GeneratieResultaat
@@ -29,6 +30,8 @@ export function ResultaatView({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showOfferte, setShowOfferte] = useState(false)
+  const beslagNaam =
+    BESLAG_KLEUREN.find((b) => b.id === resultaat.beslagKleur)?.naam ?? null
 
   async function handleDownload() {
     setError(null)
@@ -51,6 +54,7 @@ export function ResultaatView({
           </h1>
           <p className="lead">
             {product.naam} · {resultaat.kleur}
+            {beslagNaam ? ` · beslag ${beslagNaam}` : ''}
             {resultaat.fromCache ? ' · uit cache' : ''}
           </p>
         </div>

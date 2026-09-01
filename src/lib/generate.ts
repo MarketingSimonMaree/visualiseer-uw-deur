@@ -9,6 +9,7 @@ export interface GenerateRequestBody {
   productId: string
   productNaam: string
   kleur: string
+  beslagKleur?: string
   montagetype: Montagetype
   cacheKey: string
 }
