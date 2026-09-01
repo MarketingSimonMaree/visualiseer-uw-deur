@@ -1,7 +1,7 @@
 /**
  * Keiharde basisregels die altijd meekomen bij beeldgeneratie.
  * Beslag-specifieke regels komen apart via beslagAgentPrompt.
- * Montagetype-specifieke regels via montageAgentPrompt + extra voordeur-regels hieronder.
+ * Montagetype-specifieke regels via montageAgentPrompt + neverLeverHandle.
  */
 export const HARD_VISUAL_RULES = [
   'HARD RULES — these override anything visible in either photo:',
@@ -14,19 +14,13 @@ export const HARD_VISUAL_RULES = [
 
 /** Extra harde regels voor voordeuren — nooit een binnenklink. */
 export const FRONT_DOOR_HARD_RULES = [
-  'FRONT DOOR HARDWARE (critical — exterior voordeur):',
+  'FRONT DOOR HARDWARE (critical — exterior voordeur / entree):',
   'NEVER use an interior lever handle / deurkruk / klink.',
   'Dutch front doors do not get a lever klink.',
   'Use ONLY exterior-appropriate hardware: a round/oval door knob (deurknop) OR a pull bar/stang IF Image 2 (product) already shows that hardware.',
   'If Image 2 shows a knob, use a knob. If Image 2 shows a vertical or horizontal pull bar/stang, use that same style.',
   'If Image 2 hardware is unclear, prefer a round door knob — never a lever klink.',
 ].join(' ')
-
-function isFrontDoorMontage(montagetype: string): boolean {
-  return (
-    montagetype === 'voordeur' || montagetype === 'voordeur-met-kozijn'
-  )
-}
 
 export function buildGeneratePrompt(opts: {
   productNaam: string
@@ -35,16 +29,21 @@ export function buildGeneratePrompt(opts: {
   montageAgentPrompt?: string
   beslagAgentPrompt?: string
   agentExtra?: string
+  /** true = voordeur-achtig (geen klink). false = tuindeur/binnen (klink mag). */
+  neverLeverHandle?: boolean
 }): string {
-  const frontDoor = isFrontDoorMontage(opts.montagetype)
+  const neverLever =
+    opts.neverLeverHandle === true ||
+    opts.montagetype === 'voordeur' ||
+    opts.montagetype === 'voordeur-met-kozijn'
   const montageInstruction =
     opts.montageAgentPrompt?.trim() ||
     `Mounting type: ${opts.montagetype}.`
   const beslagInstruction =
     opts.beslagAgentPrompt?.trim() ||
-    (frontDoor
+    (neverLever
       ? 'Hardware: exterior front-door hardware only — round/oval knob or a pull bar/stang if the product shows one. NEVER a lever deurkruk/klink.'
-      : 'Hardware: use a standard Dutch lever door handle (deurkruk). NEVER a vertical pull bar unless explicitly required.')
+      : 'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.')
   const extra = opts.agentExtra?.trim()
 
   return [
@@ -58,7 +57,7 @@ export function buildGeneratePrompt(opts: {
     `Hardware guidance: ${beslagInstruction}`,
     extra ? `Additional product guidance: ${extra}` : '',
     HARD_VISUAL_RULES,
-    frontDoor ? FRONT_DOOR_HARD_RULES : '',
+    neverLever ? FRONT_DOOR_HARD_RULES : '',
     'No people, no text overlays, no logos, no watermarks.',
     'Output one photorealistic photo.',
   ]

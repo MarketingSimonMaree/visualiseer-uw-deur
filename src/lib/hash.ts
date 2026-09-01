@@ -9,7 +9,7 @@ export async function sha256Hex(input: Blob | string): Promise<string> {
 }
 
 /** Bump bij harde promptwijzigingen zodat oude cache niet terugkomt. */
-export const PROMPT_CACHE_VERSION = 'v5-glass-voordeur-hardware'
+export const PROMPT_CACHE_VERSION = 'v6-tuindeur-montages'
 
 /** Cache-sleutel: foto + deur + kleur (+ promptversie). */
 export async function buildCacheKey(

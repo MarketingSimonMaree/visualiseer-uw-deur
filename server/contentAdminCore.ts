@@ -142,21 +142,57 @@ async function ensureTables(sql: {
     )
   `
   await sql`ALTER TABLE catalogus_filters ADD COLUMN IF NOT EXISTS montagetype TEXT NOT NULL DEFAULT ''`
+  await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
+  await sql`
+    UPDATE montagetype_defs SET never_lever_handle = true
+    WHERE id IN ('voordeur', 'voordeur-met-kozijn')
+  `
+  await sql`
+    INSERT INTO montagetype_defs (
+      id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+    ) VALUES
+      ('tuindeur', 'Nieuwe tuindeur in bestaand kozijn',
+       'Achterdeur / tuindeur in uw bestaande kozijn',
+       'Replace only the garden/back door leaf (tuindeur/achterdeur) in the existing exterior frame. Keep the existing frame unchanged. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+       70, true, false, now()),
+      ('tuindeur-met-kozijn', 'Nieuwe tuindeur mét nieuw kozijn',
+       'Achterdeur / tuindeur inclusief nieuw kozijn',
+       'Replace the garden/back door (tuindeur/achterdeur) including a new exterior frame that fits the opening. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+       80, true, false, now())
+    ON CONFLICT (id) DO NOTHING
+  `
 }
 
 export async function getPublicContent(projectRoot: string) {
   const databaseUrl = loadDatabaseUrl(projectRoot)
   if (!databaseUrl) {
-    return { situatie: DEFAULT_SITUATIE, filters: [] as CatalogusFilter[] }
+    return {
+      situatie: DEFAULT_SITUATIE,
+      filters: [] as CatalogusFilter[],
+      montagetypes: [] as Array<{
+        id: string
+        label: string
+        hint: string
+        sortOrder: number
+        actief: boolean
+        neverLeverHandle: boolean
+      }>,
+    }
   }
   try {
     const sql = neon(databaseUrl)
     await ensureTables(sql)
-    const [tekstRows, filterRows] = await Promise.all([
+    const [tekstRows, filterRows, montageRows] = await Promise.all([
       sql`SELECT payload FROM site_teksten WHERE id = 'situatie' LIMIT 1`,
       sql`
         SELECT id, label, montagetype, sort_order, actief, product_ids
         FROM catalogus_filters
+        WHERE actief = true
+        ORDER BY sort_order ASC, label ASC
+      `,
+      sql`
+        SELECT id, label, hint, sort_order, actief, never_lever_handle
+        FROM montagetype_defs
         WHERE actief = true
         ORDER BY sort_order ASC, label ASC
       `,
@@ -181,9 +217,26 @@ export async function getPublicContent(projectRoot: string) {
         sortOrder: r.sort_order,
         productIds: parseIds(r.product_ids),
       })),
+      montagetypes: (
+        montageRows as Array<{
+          id: string
+          label: string
+          hint: string
+          sort_order: number
+          actief: boolean
+          never_lever_handle: boolean | null
+        }>
+      ).map((r) => ({
+        id: r.id,
+        label: r.label,
+        hint: r.hint,
+        sortOrder: r.sort_order,
+        actief: r.actief !== false,
+        neverLeverHandle: Boolean(r.never_lever_handle),
+      })),
     }
   } catch {
-    return { situatie: DEFAULT_SITUATIE, filters: [] }
+    return { situatie: DEFAULT_SITUATIE, filters: [], montagetypes: [] }
   }
 }
 

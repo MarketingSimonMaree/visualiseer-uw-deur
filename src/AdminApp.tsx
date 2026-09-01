@@ -16,10 +16,10 @@ import {
   getAdminUsername,
   patchAdminBeslag,
   patchAdminMailTemplate,
-  patchAdminMontagetype,
   patchAdminProductApi,
   saveAdminCollectie,
   saveAdminKleur,
+  saveAdminMontagetype,
   saveAdminProduct,
   AdminApiError,
   type AdminBeslag,
@@ -69,7 +69,6 @@ const DEFAULT_SITUATIE: SituatieTekst = {
   ],
 }
 
-const MONTAGETYPES = Object.keys(MONTAGETYPE_LABELS) as Montagetype[]
 const MATERIALEN: Materiaal[] = ['hout', 'staal', 'aluminium']
 
 const emptyForm = (): ProductInput => ({
@@ -659,12 +658,34 @@ export default function AdminApp() {
 
         {!loading && tab === 'montagetypes' && (
           <div className="mt-6">
-            <h1 className="section-title text-2xl sm:text-3xl">
-              <span className="gold">Montagetypes</span>
-            </h1>
-            <p className="mt-1 text-[var(--colorDarkGray)]">
-              Wat de klant kiest én wat de AI meekrijgt bij beeldgeneratie.
-            </p>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h1 className="section-title text-2xl sm:text-3xl">
+                  <span className="gold">Montagetypes</span>
+                </h1>
+                <p className="mt-1 text-[var(--colorDarkGray)]">
+                  Wat de klant kiest én wat de AI meekrijgt. Voordeuren: geen
+                  klink. Tuindeuren: klink mag.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() =>
+                  setEditingMontage({
+                    id: '',
+                    label: '',
+                    hint: '',
+                    agentPrompt: '',
+                    sortOrder: 100,
+                    actief: true,
+                    neverLeverHandle: false,
+                  })
+                }
+              >
+                Nieuw montagetype
+              </button>
+            </div>
             <ul className="mt-6 space-y-4">
               {montages.map((m) => (
                 <li
@@ -673,8 +694,18 @@ export default function AdminApp() {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold">{m.label}</p>
-                      <p className="text-xs text-[var(--colorDarkGray)]">{m.id}</p>
+                      <p className="font-bold">
+                        {m.label}{' '}
+                        {!m.actief && (
+                          <span className="text-sm font-normal text-[var(--colorDarkGray)]">
+                            (uit)
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-[var(--colorDarkGray)]">
+                        {m.id}
+                        {m.neverLeverHandle ? ' · geen klink' : ' · klink mag'}
+                      </p>
                       <p className="mt-1 text-sm text-[var(--colorDarkGray)]">
                         {m.hint}
                       </p>
@@ -682,7 +713,12 @@ export default function AdminApp() {
                     <button
                       type="button"
                       className="rounded-full border border-[var(--colorPrimary)] px-3 py-1.5 text-sm font-medium text-[var(--colorPrimary)]"
-                      onClick={() => setEditingMontage({ ...m })}
+                      onClick={() =>
+                        setEditingMontage({
+                          ...m,
+                          neverLeverHandle: Boolean(m.neverLeverHandle),
+                        })
+                      }
                     >
                       Bewerken
                     </button>
@@ -1046,21 +1082,34 @@ export default function AdminApp() {
             <fieldset className="mt-4">
               <legend className="text-sm font-medium">Montagetypes</legend>
               <div className="mt-2 flex flex-col gap-2">
-                {MONTAGETYPES.map((m) => {
-                  const checked = editing.montagetypes.includes(m)
+                {(montages.length
+                  ? montages
+                  : (Object.keys(MONTAGETYPE_LABELS) as Montagetype[]).map(
+                      (id) => ({
+                        id,
+                        label: MONTAGETYPE_LABELS[id]!,
+                        hint: '',
+                        agentPrompt: '',
+                        sortOrder: 0,
+                        actief: true,
+                        neverLeverHandle: false,
+                      }),
+                    )
+                ).map((m) => {
+                  const checked = editing.montagetypes.includes(m.id)
                   return (
-                    <label key={m} className="flex items-center gap-2 text-sm">
+                    <label key={m.id} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => {
                           const next = checked
-                            ? editing.montagetypes.filter((x) => x !== m)
-                            : [...editing.montagetypes, m]
+                            ? editing.montagetypes.filter((x) => x !== m.id)
+                            : [...editing.montagetypes, m.id]
                           setEditing({ ...editing, montagetypes: next })
                         }}
                       />
-                      {MONTAGETYPE_LABELS[m]}
+                      {m.label}
                     </label>
                   )
                 })}
@@ -1191,24 +1240,39 @@ export default function AdminApp() {
             <fieldset className="mt-2">
               <legend className="text-sm font-medium">Montagetypes</legend>
               <div className="mt-2 flex flex-col gap-2">
-                {MONTAGETYPES.map((m) => {
-                  const checked = editingCollectie.montagetypes.includes(m)
+                {(montages.length
+                  ? montages
+                  : (Object.keys(MONTAGETYPE_LABELS) as Montagetype[]).map(
+                      (id) => ({
+                        id,
+                        label: MONTAGETYPE_LABELS[id]!,
+                        hint: '',
+                        agentPrompt: '',
+                        sortOrder: 0,
+                        actief: true,
+                        neverLeverHandle: false,
+                      }),
+                    )
+                ).map((m) => {
+                  const checked = editingCollectie.montagetypes.includes(m.id)
                   return (
-                    <label key={m} className="flex items-center gap-2 text-sm">
+                    <label key={m.id} className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => {
                           const next = checked
-                            ? editingCollectie.montagetypes.filter((x) => x !== m)
-                            : [...editingCollectie.montagetypes, m]
+                            ? editingCollectie.montagetypes.filter(
+                                (x) => x !== m.id,
+                              )
+                            : [...editingCollectie.montagetypes, m.id]
                           setEditingCollectie({
                             ...editingCollectie,
                             montagetypes: next,
                           })
                         }}
                       />
-                      {MONTAGETYPE_LABELS[m]}
+                      {m.label}
                     </label>
                   )
                 })}
@@ -1509,20 +1573,41 @@ export default function AdminApp() {
       )}
 
       {editingMontage && (
-        <Modal title="Montagetype bewerken" onClose={() => setEditingMontage(null)}>
+        <Modal
+          title={
+            editingMontage.id && montages.some((m) => m.id === editingMontage.id)
+              ? 'Montagetype bewerken'
+              : 'Nieuw montagetype'
+          }
+          onClose={() => setEditingMontage(null)}
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              void patchAdminMontagetype({
-                id: editingMontage.id,
-                label: editingMontage.label,
-                hint: editingMontage.hint,
-                agentPrompt: editingMontage.agentPrompt,
-                actief: editingMontage.actief,
-              })
+              if (!editingMontage.label.trim()) {
+                setError('Label is verplicht')
+                return
+              }
+              const isNew = !montages.some((m) => m.id === editingMontage.id)
+              void saveAdminMontagetype(
+                {
+                  id: editingMontage.id || undefined,
+                  label: editingMontage.label.trim(),
+                  hint: editingMontage.hint,
+                  agentPrompt: editingMontage.agentPrompt,
+                  actief: editingMontage.actief,
+                  sortOrder: editingMontage.sortOrder,
+                  neverLeverHandle: editingMontage.neverLeverHandle,
+                },
+                isNew || !editingMontage.id,
+              )
                 .then((m) => {
                   setMontages((prev) =>
-                    prev.map((x) => (x.id === m.id ? m : x)),
+                    [...prev.filter((x) => x.id !== m.id), m].sort(
+                      (a, b) =>
+                        a.sortOrder - b.sortOrder ||
+                        a.label.localeCompare(b.label, 'nl'),
+                    ),
                   )
                   setEditingMontage(null)
                 })
@@ -1534,10 +1619,12 @@ export default function AdminApp() {
             <Field label="Label">
               <input
                 className="field-input"
+                required
                 value={editingMontage.label}
                 onChange={(e) =>
                   setEditingMontage({ ...editingMontage, label: e.target.value })
                 }
+                placeholder="Bijv. Nieuwe tuindeur in bestaand kozijn"
               />
             </Field>
             <Field label="Hint (klant)">
@@ -1546,6 +1633,19 @@ export default function AdminApp() {
                 value={editingMontage.hint}
                 onChange={(e) =>
                   setEditingMontage({ ...editingMontage, hint: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="Volgorde">
+              <input
+                type="number"
+                className="field-input"
+                value={editingMontage.sortOrder}
+                onChange={(e) =>
+                  setEditingMontage({
+                    ...editingMontage,
+                    sortOrder: Number(e.target.value) || 0,
+                  })
                 }
               />
             </Field>
@@ -1561,6 +1661,32 @@ export default function AdminApp() {
                 }
               />
             </Field>
+            <label className="mt-4 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editingMontage.neverLeverHandle}
+                onChange={(e) =>
+                  setEditingMontage({
+                    ...editingMontage,
+                    neverLeverHandle: e.target.checked,
+                  })
+                }
+              />
+              Nooit een klink (voordeuren / entree) — knop of stang i.p.v. deurkruk
+            </label>
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={editingMontage.actief}
+                onChange={(e) =>
+                  setEditingMontage({
+                    ...editingMontage,
+                    actief: e.target.checked,
+                  })
+                }
+              />
+              Actief (zichtbaar voor klanten)
+            </label>
             <div className="mt-6 flex gap-3">
               <button type="submit" className="btn btn-primary">
                 Opslaan

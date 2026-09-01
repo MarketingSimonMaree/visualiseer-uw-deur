@@ -168,14 +168,24 @@ export async function fetchAdminMontagetypes(): Promise<MontagetypeDef[]> {
   return data.montagetypes
 }
 
-export async function patchAdminMontagetype(
-  input: Partial<MontagetypeDef> & { id: string },
+export async function saveAdminMontagetype(
+  input: Partial<MontagetypeDef> & { label: string },
+  isNew: boolean,
 ): Promise<MontagetypeDef> {
   const data = await adminFetch<{ montagetype: MontagetypeDef }>(
     '/api/admin-montagetypes',
-    { method: 'PATCH', body: JSON.stringify(input) },
+    {
+      method: isNew ? 'POST' : 'PATCH',
+      body: JSON.stringify(input),
+    },
   )
   return data.montagetype
+}
+
+export async function patchAdminMontagetype(
+  input: Partial<MontagetypeDef> & { id: string },
+): Promise<MontagetypeDef> {
+  return saveAdminMontagetype({ ...input, label: input.label ?? input.id }, false)
 }
 
 export async function fetchAdminKleuren(): Promise<AdminKleur[]> {

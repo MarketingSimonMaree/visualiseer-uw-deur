@@ -26,23 +26,40 @@ function requireAuth(req: VercelRequest) {
   const token = bearerToken(req.headers.authorization)
   if (!token) return false
   const parts = token.split('.')
-  if (parts.length !== 4) return false
-  const [exp, nonce, username, sig] = parts
+  if (parts.length < 4) return false
+  const exp = parts[0]
+  const nonce = parts[1]
+  const sig = parts[parts.length - 1]
+  const username = parts.slice(2, -1).join('.')
   if (!exp || !nonce || !username || !sig) return false
   if (!Number.isFinite(Number(exp)) || Date.now() > Number(exp)) return false
   const payload = `${exp}.${nonce}.${username}`
-  const expected = createHmac('sha256', adminSecret()).update(payload).digest('hex')
+  const expected = createHmac('sha256', adminSecret())
+    .update(payload)
+    .digest('hex')
   return safeEqual(sig, expected)
 }
 
-function mapRow(row: {
+function slugify(id: string) {
+  return id
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+type Row = {
   id: string
   label: string
   hint: string
   agent_prompt: string
   sort_order: number
   actief: boolean
-}) {
+  never_lever_handle: boolean | null
+}
+
+function mapRow(row: Row) {
   return {
     id: row.id,
     label: row.label,
@@ -50,6 +67,50 @@ function mapRow(row: {
     agentPrompt: row.agent_prompt,
     sortOrder: row.sort_order,
     actief: row.actief !== false,
+    neverLeverHandle: Boolean(row.never_lever_handle),
+  }
+}
+
+const SEED = [
+  {
+    id: 'tuindeur',
+    label: 'Nieuwe tuindeur in bestaand kozijn',
+    hint: 'Achterdeur / tuindeur in uw bestaande kozijn',
+    agent_prompt:
+      'Replace only the garden/back door leaf (tuindeur/achterdeur) in the existing exterior frame. Keep the existing frame unchanged. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+    sort_order: 70,
+    never_lever_handle: false,
+  },
+  {
+    id: 'tuindeur-met-kozijn',
+    label: 'Nieuwe tuindeur mét nieuw kozijn',
+    hint: 'Achterdeur / tuindeur inclusief nieuw kozijn',
+    agent_prompt:
+      'Replace the garden/back door (tuindeur/achterdeur) including a new exterior frame that fits the opening. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+    sort_order: 80,
+    never_lever_handle: false,
+  },
+]
+
+async function ensure(sql: {
+  (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>
+}) {
+  await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
+  await sql`
+    UPDATE montagetype_defs
+    SET never_lever_handle = true
+    WHERE id IN ('voordeur', 'voordeur-met-kozijn')
+  `
+  for (const s of SEED) {
+    await sql`
+      INSERT INTO montagetype_defs (
+        id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+      ) VALUES (
+        ${s.id}, ${s.label}, ${s.hint}, ${s.agent_prompt}, ${s.sort_order},
+        true, ${s.never_lever_handle}, now()
+      )
+      ON CONFLICT (id) DO NOTHING
+    `
   }
 }
 
@@ -66,19 +127,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = neon(databaseUrl)
 
   try {
+    await ensure(sql)
+
     if (req.method === 'GET') {
       const rows = await sql`
-        SELECT id, label, hint, agent_prompt, sort_order, actief
+        SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
         FROM montagetype_defs
         ORDER BY sort_order ASC, label ASC
       `
       res.status(200).json({
-        montagetypes: (rows as Array<Parameters<typeof mapRow>[0]>).map(mapRow),
+        montagetypes: (rows as Row[]).map(mapRow),
       })
       return
     }
 
-    if (req.method === 'PATCH') {
+    if (req.method === 'POST' || req.method === 'PATCH') {
       const body = (req.body ?? {}) as {
         id?: string
         label?: string
@@ -86,36 +149,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         agentPrompt?: string
         actief?: boolean
         sortOrder?: number
+        neverLeverHandle?: boolean
       }
-      if (!body.id) {
+      const label = body.label?.trim()
+      if (!label) {
+        res.status(400).json({ error: 'label is verplicht' })
+        return
+      }
+      const id = slugify(body.id || label)
+      if (!id) {
         res.status(400).json({ error: 'id is verplicht' })
         return
       }
-      const existing = await sql`
-        SELECT id, label, hint, agent_prompt, sort_order, actief
-        FROM montagetype_defs WHERE id = ${body.id} LIMIT 1
-      `
-      const row = (existing as Array<Parameters<typeof mapRow>[0]>)[0]
-      if (!row) {
-        res.status(404).json({ error: 'Montagetype niet gevonden' })
-        return
+
+      if (req.method === 'POST') {
+        await sql`
+          INSERT INTO montagetype_defs (
+            id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+          ) VALUES (
+            ${id}, ${label}, ${body.hint ?? ''}, ${body.agentPrompt ?? ''},
+            ${body.sortOrder ?? 100}, ${body.actief !== false},
+            ${Boolean(body.neverLeverHandle)}, now()
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            label = EXCLUDED.label,
+            hint = EXCLUDED.hint,
+            agent_prompt = EXCLUDED.agent_prompt,
+            sort_order = EXCLUDED.sort_order,
+            actief = EXCLUDED.actief,
+            never_lever_handle = EXCLUDED.never_lever_handle,
+            updated_at = now()
+        `
+      } else {
+        const existing = await sql`
+          SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+          FROM montagetype_defs WHERE id = ${id} LIMIT 1
+        `
+        const row = (existing as Row[])[0]
+        if (!row) {
+          res.status(404).json({ error: 'Montagetype niet gevonden' })
+          return
+        }
+        await sql`
+          UPDATE montagetype_defs SET
+            label = ${body.label ?? row.label},
+            hint = ${body.hint ?? row.hint},
+            agent_prompt = ${body.agentPrompt ?? row.agent_prompt},
+            actief = ${body.actief ?? row.actief},
+            sort_order = ${body.sortOrder ?? row.sort_order},
+            never_lever_handle = ${
+              body.neverLeverHandle !== undefined
+                ? Boolean(body.neverLeverHandle)
+                : Boolean(row.never_lever_handle)
+            },
+            updated_at = now()
+          WHERE id = ${id}
+        `
       }
-      await sql`
-        UPDATE montagetype_defs SET
-          label = ${body.label ?? row.label},
-          hint = ${body.hint ?? row.hint},
-          agent_prompt = ${body.agentPrompt ?? row.agent_prompt},
-          actief = ${body.actief ?? row.actief},
-          sort_order = ${body.sortOrder ?? row.sort_order},
-          updated_at = now()
-        WHERE id = ${body.id}
-      `
+
       const updated = await sql`
-        SELECT id, label, hint, agent_prompt, sort_order, actief
-        FROM montagetype_defs WHERE id = ${body.id} LIMIT 1
+        SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+        FROM montagetype_defs WHERE id = ${id} LIMIT 1
       `
       res.status(200).json({
-        montagetype: mapRow((updated as Array<Parameters<typeof mapRow>[0]>)[0]!),
+        montagetype: mapRow((updated as Row[])[0]!),
       })
       return
     }

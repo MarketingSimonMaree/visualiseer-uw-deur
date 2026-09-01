@@ -28,6 +28,15 @@ import {
   type PublicCatalogusFilter,
 } from './lib/contentApi'
 import type { SituatieTekst } from './lib/adminApi'
+import type {
+  AppStep,
+  GeneratieResultaat,
+  KamerFoto,
+  Montagetype,
+  MontagetypeDef,
+  Product,
+} from './types/product'
+import { MONTAGETYPE_LABELS } from './types/product'
 import {
   getGenerationCount,
   incrementDailyGenerationCount,
@@ -37,14 +46,6 @@ import {
   remainingGenerations,
   setSessionEmail,
 } from './lib/session'
-import type {
-  AppStep,
-  GeneratieResultaat,
-  KamerFoto,
-  Montagetype,
-  Product,
-} from './types/product'
-import { MONTAGETYPE_LABELS } from './types/product'
 import type { KlantGegevens } from './components/KlantGegevensForm'
 
 function maxStep(a: AppStep, b: AppStep): AppStep {
@@ -100,6 +101,9 @@ export default function App() {
   const [catalogusFilters, setCatalogusFilters] = useState<
     PublicCatalogusFilter[]
   >([])
+  const [montagetypeOpties, setMontagetypeOpties] = useState<MontagetypeDef[]>(
+    [],
+  )
   const [situatieTekst, setSituatieTekst] = useState<SituatieTekst>({
     titelGold: 'Huidige',
     titel: 'situatie',
@@ -128,6 +132,12 @@ export default function App() {
         setProductenError(null)
         setSituatieTekst(content.situatie)
         setCatalogusFilters(content.filters)
+        setMontagetypeOpties(
+          content.montagetypes.map((m) => ({
+            ...m,
+            agentPrompt: '',
+          })),
+        )
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -363,6 +373,7 @@ export default function App() {
 
         {step === 'plan' && (
           <MontagetypeKiezer
+            options={montagetypeOpties}
             value={montagetype}
             onChange={setMontagetype}
             onBack={() => goTo('situatie')}

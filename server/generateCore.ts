@@ -237,6 +237,8 @@ export async function runGeneration(
     DEFAULT_AGENT_PROMPTS[montagetype] ?? `Mounting type: ${montagetype}.`
   let beslagAgentPrompt: string | undefined
   let agentExtra: string | undefined
+  let neverLeverHandle =
+    montagetype === 'voordeur' || montagetype === 'voordeur-met-kozijn'
 
   const databaseUrl = process.env.DATABASE_URL?.trim()
   if (databaseUrl) {
@@ -245,13 +247,18 @@ export async function runGeneration(
       const sql = neon(databaseUrl)
 
       const montageRows = await sql`
-        SELECT agent_prompt FROM montagetype_defs
+        SELECT agent_prompt, never_lever_handle FROM montagetype_defs
         WHERE id = ${montagetype} AND actief = true
         LIMIT 1
       `
-      const fromDb = (montageRows as Array<{ agent_prompt: string }>)[0]
-        ?.agent_prompt?.trim()
-      if (fromDb) montageAgentPrompt = fromDb
+      const fromDb = (
+        montageRows as Array<{
+          agent_prompt: string
+          never_lever_handle: boolean | null
+        }>
+      )[0]
+      if (fromDb?.agent_prompt?.trim()) montageAgentPrompt = fromDb.agent_prompt.trim()
+      if (fromDb) neverLeverHandle = Boolean(fromDb.never_lever_handle)
 
       let beslagId: string | null = null
       let extra = ''
@@ -319,6 +326,7 @@ export async function runGeneration(
       montageAgentPrompt,
       beslagAgentPrompt,
       agentExtra,
+      neverLeverHandle,
     }),
     size: IMAGE_SIZE,
     quality: IMAGE_QUALITY,

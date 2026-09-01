@@ -64,13 +64,26 @@ async function resolveAgentGuidance(opts: {
   montagetype: string
   productId?: string
   collectieHint?: string
-}): Promise<{ montage: string; beslag: string; extra: string }> {
+}): Promise<{
+  montage: string
+  beslag: string
+  extra: string
+  neverLeverHandle: boolean
+}> {
   const fallbackMontage = `Mounting type: ${opts.montagetype}.`
-  const fallbackBeslag =
-    'Hardware: use a standard Dutch lever door handle (deurkruk). NEVER a vertical pull bar unless explicitly required.'
+  const neverLeverDefault =
+    opts.montagetype === 'voordeur' || opts.montagetype === 'voordeur-met-kozijn'
+  const fallbackBeslag = neverLeverDefault
+    ? 'Hardware: exterior front-door hardware only — round/oval knob or a pull bar/stang if the product shows one. NEVER a lever deurkruk/klink.'
+    : 'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.'
   const databaseUrl = process.env.DATABASE_URL?.trim()
   if (!databaseUrl) {
-    return { montage: fallbackMontage, beslag: fallbackBeslag, extra: '' }
+    return {
+      montage: fallbackMontage,
+      beslag: fallbackBeslag,
+      extra: '',
+      neverLeverHandle: neverLeverDefault,
+    }
   }
 
   try {
@@ -78,13 +91,20 @@ async function resolveAgentGuidance(opts: {
     const sql = neon(databaseUrl)
 
     const montageRows = await sql`
-      SELECT agent_prompt FROM montagetype_defs
+      SELECT agent_prompt, never_lever_handle FROM montagetype_defs
       WHERE id = ${opts.montagetype} AND actief = true
       LIMIT 1
     `
-    const montage =
-      (montageRows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim() ||
-      fallbackMontage
+    const montageRow = (
+      montageRows as Array<{
+        agent_prompt: string
+        never_lever_handle: boolean | null
+      }>
+    )[0]
+    const montage = montageRow?.agent_prompt?.trim() || fallbackMontage
+    const neverLeverHandle = montageRow
+      ? Boolean(montageRow.never_lever_handle)
+      : neverLeverDefault
 
     let beslagId: string | null = null
     let agentExtra = ''
@@ -138,24 +158,32 @@ async function resolveAgentGuidance(opts: {
       (beslagRows as Array<{ agent_prompt: string }>)[0]?.agent_prompt?.trim() ||
       fallbackBeslag
 
-    return { montage, beslag, extra: agentExtra }
+    return { montage, beslag, extra: agentExtra, neverLeverHandle }
   } catch {
-    return { montage: fallbackMontage, beslag: fallbackBeslag, extra: '' }
+    return {
+      montage: fallbackMontage,
+      beslag: fallbackBeslag,
+      extra: '',
+      neverLeverHandle: neverLeverDefault,
+    }
   }
 }
 
 function buildPrompt(
   body: Required<Pick<GenBody, 'productNaam' | 'kleur' | 'montagetype'>>,
-  guidance: { montage: string; beslag: string; extra: string },
+  guidance: {
+    montage: string
+    beslag: string
+    extra: string
+    neverLeverHandle: boolean
+  },
 ) {
-  const frontDoor =
-    body.montagetype === 'voordeur' ||
-    body.montagetype === 'voordeur-met-kozijn'
+  const neverLever = guidance.neverLeverHandle
   const beslag =
     guidance.beslag ||
-    (frontDoor
+    (neverLever
       ? 'Hardware: exterior front-door hardware only — round/oval knob or a pull bar/stang if the product shows one. NEVER a lever deurkruk/klink.'
-      : 'Hardware: use a standard Dutch lever door handle (deurkruk). NEVER a vertical pull bar unless explicitly required.')
+      : 'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.')
 
   return [
     'Photorealistic photo edit of a real room.',
@@ -173,9 +201,9 @@ function buildPrompt(
     '3. GLASS / NO-GLASS LAYOUT (critical): Copy solid panels vs glass STRICTLY from Image 2 (the product). If Image 2 has NO glass, the new door must be FULLY OPAQUE with ZERO glass or glazing — even when Image 1 shows a glazed door. Never invent glass, sidelights, or vision panels that are not on Image 2. If Image 2 has glass, place clear glass only in those same panel positions.',
     '4. If there IS glass from Image 2, it must be CLEAR and TRANSPARENT (see-through). Never frosted, sandblasted, milky, smoked-opaque, or privacy glass.',
     '5. From Image 2, copy only the door design: proportions, panels, frame profile, and material look. Ignore its open/closed state. Follow the hardware guidance for handle/pull type.',
-    frontDoor
+    neverLever
       ? [
-          'FRONT DOOR HARDWARE (critical — exterior voordeur):',
+          'FRONT DOOR HARDWARE (critical — exterior voordeur / entree):',
           'NEVER use an interior lever handle / deurkruk / klink.',
           'Dutch front doors do not get a lever klink.',
           'Use ONLY exterior-appropriate hardware: a round/oval door knob (deurknop) OR a pull bar/stang IF Image 2 (product) already shows that hardware.',

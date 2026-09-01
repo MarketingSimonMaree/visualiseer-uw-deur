@@ -222,79 +222,137 @@ export function generateApiPlugin(): Plugin {
             }
             if (!dbUrl) throw new Error('DATABASE_URL ontbreekt')
             const sql = neon(dbUrl)
+            await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
+            await sql`
+              UPDATE montagetype_defs SET never_lever_handle = true
+              WHERE id IN ('voordeur', 'voordeur-met-kozijn')
+            `
+            await sql`
+              INSERT INTO montagetype_defs (
+                id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+              ) VALUES
+                ('tuindeur', 'Nieuwe tuindeur in bestaand kozijn',
+                 'Achterdeur / tuindeur in uw bestaande kozijn',
+                 'Replace only the garden/back door leaf (tuindeur/achterdeur) in the existing exterior frame. Keep the existing frame unchanged. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+                 70, true, false, now()),
+                ('tuindeur-met-kozijn', 'Nieuwe tuindeur mét nieuw kozijn',
+                 'Achterdeur / tuindeur inclusief nieuw kozijn',
+                 'Replace the garden/back door (tuindeur/achterdeur) including a new exterior frame that fits the opening. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+                 80, true, false, now())
+              ON CONFLICT (id) DO NOTHING
+            `
+            const mapM = (r: {
+              id: string
+              label: string
+              hint: string
+              agent_prompt: string
+              sort_order: number
+              actief: boolean
+              never_lever_handle: boolean | null
+            }) => ({
+              id: r.id,
+              label: r.label,
+              hint: r.hint,
+              agentPrompt: r.agent_prompt,
+              sortOrder: r.sort_order,
+              actief: r.actief !== false,
+              neverLeverHandle: Boolean(r.never_lever_handle),
+            })
+
             if (req.method === 'GET') {
               const rows = await sql`
-                SELECT id, label, hint, agent_prompt, sort_order, actief
-                FROM montagetype_defs ORDER BY sort_order ASC
+                SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+                FROM montagetype_defs ORDER BY sort_order ASC, label ASC
               `
               sendJson(res, 200, {
                 montagetypes: (
-                  rows as Array<{
-                    id: string
-                    label: string
-                    hint: string
-                    agent_prompt: string
-                    sort_order: number
-                    actief: boolean
-                  }>
-                ).map((r) => ({
-                  id: r.id,
-                  label: r.label,
-                  hint: r.hint,
-                  agentPrompt: r.agent_prompt,
-                  sortOrder: r.sort_order,
-                  actief: r.actief,
-                })),
+                  rows as Array<Parameters<typeof mapM>[0]>
+                ).map(mapM),
               })
               return
             }
-            if (req.method === 'PATCH') {
+
+            if (req.method === 'POST' || req.method === 'PATCH') {
               const body = (await readJsonBody(req)) as {
                 id?: string
                 label?: string
                 hint?: string
                 agentPrompt?: string
                 actief?: boolean
+                sortOrder?: number
+                neverLeverHandle?: boolean
               }
-              if (!body.id) {
+              const label = body.label?.trim()
+              if (!label) {
+                sendJson(res, 400, { error: 'label is verplicht' })
+                return
+              }
+              const id = (body.id || label)
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9-]+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '')
+              if (!id) {
                 sendJson(res, 400, { error: 'id is verplicht' })
                 return
               }
-              await sql`
-                UPDATE montagetype_defs SET
-                  label = COALESCE(${body.label ?? null}, label),
-                  hint = COALESCE(${body.hint ?? null}, hint),
-                  agent_prompt = COALESCE(${body.agentPrompt ?? null}, agent_prompt),
-                  actief = COALESCE(${body.actief ?? null}, actief),
-                  updated_at = now()
-                WHERE id = ${body.id}
-              `
+              if (req.method === 'POST') {
+                await sql`
+                  INSERT INTO montagetype_defs (
+                    id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, updated_at
+                  ) VALUES (
+                    ${id}, ${label}, ${body.hint ?? ''}, ${body.agentPrompt ?? ''},
+                    ${body.sortOrder ?? 100}, ${body.actief !== false},
+                    ${Boolean(body.neverLeverHandle)}, now()
+                  )
+                  ON CONFLICT (id) DO UPDATE SET
+                    label = EXCLUDED.label,
+                    hint = EXCLUDED.hint,
+                    agent_prompt = EXCLUDED.agent_prompt,
+                    sort_order = EXCLUDED.sort_order,
+                    actief = EXCLUDED.actief,
+                    never_lever_handle = EXCLUDED.never_lever_handle,
+                    updated_at = now()
+                `
+              } else {
+                const existing = await sql`
+                  SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+                  FROM montagetype_defs WHERE id = ${id} LIMIT 1
+                `
+                const row = (existing as Array<Parameters<typeof mapM>[0]>)[0]
+                if (!row) {
+                  sendJson(res, 404, { error: 'Montagetype niet gevonden' })
+                  return
+                }
+                await sql`
+                  UPDATE montagetype_defs SET
+                    label = ${body.label ?? row.label},
+                    hint = ${body.hint ?? row.hint},
+                    agent_prompt = ${body.agentPrompt ?? row.agent_prompt},
+                    actief = ${body.actief ?? row.actief},
+                    sort_order = ${body.sortOrder ?? row.sort_order},
+                    never_lever_handle = ${
+                      body.neverLeverHandle !== undefined
+                        ? Boolean(body.neverLeverHandle)
+                        : Boolean(row.never_lever_handle)
+                    },
+                    updated_at = now()
+                  WHERE id = ${id}
+                `
+              }
               const rows = await sql`
-                SELECT id, label, hint, agent_prompt, sort_order, actief
-                FROM montagetype_defs WHERE id = ${body.id} LIMIT 1
+                SELECT id, label, hint, agent_prompt, sort_order, actief, never_lever_handle
+                FROM montagetype_defs WHERE id = ${id} LIMIT 1
               `
-              const r = (
-                rows as Array<{
-                  id: string
-                  label: string
-                  hint: string
-                  agent_prompt: string
-                  sort_order: number
-                  actief: boolean
-                }>
-              )[0]!
               sendJson(res, 200, {
-                montagetype: {
-                  id: r.id,
-                  label: r.label,
-                  hint: r.hint,
-                  agentPrompt: r.agent_prompt,
-                  sortOrder: r.sort_order,
-                  actief: r.actief,
-                },
+                montagetype: mapM(
+                  (rows as Array<Parameters<typeof mapM>[0]>)[0]!,
+                ),
               })
               return
             }
+
             sendJson(res, 405, { error: 'Method not allowed' })
             return
           }
