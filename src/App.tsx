@@ -22,6 +22,7 @@ import { blobToDataUrl, resizeBlobForGeneration } from './lib/imageLoader'
 import { buildCacheKey } from './lib/hash'
 import { requestGeneration } from './lib/generate'
 import { requestMailResultaat } from './lib/mailResultaat'
+import { trackEvent, getAnalyticsSessionId } from './lib/analytics'
 import { fetchProducten } from './lib/productenApi'
 import {
   fetchSiteContent,
@@ -180,6 +181,7 @@ export default function App() {
       if (!foto || !product || !kleur || !beslagKleur || !montagetype) return
 
       if (isDailyLimitReached()) {
+        trackEvent({ eventType: 'daily_limit_hit' })
         setGenError(
           'Daglimiet bereikt (20 visualisaties per dag). Probeer het morgen opnieuw of vraag een offerte aan.',
         )
@@ -211,6 +213,15 @@ export default function App() {
         if (!opts.isRetry) {
           const cached = await cacheGet(cacheKey)
           if (cached) {
+            trackEvent({
+              eventType: 'generate_cache_hit',
+              productId: product.id,
+              productNaam: product.naam,
+              montagetype,
+              kleur,
+              beslagKleur,
+              fromCache: true,
+            })
             const item: GeneratieResultaat = {
               id: crypto.randomUUID(),
               cacheKey,
@@ -241,6 +252,7 @@ export default function App() {
                 montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
                 imageBase64: mimeMatch?.[2] ?? cached,
                 mimeType: mimeMatch?.[1] ?? 'image/png',
+                sessionId: getAnalyticsSessionId(),
                 ...room,
               }
               try {
@@ -264,6 +276,17 @@ export default function App() {
           }
         }
 
+        if (opts.isRetry) {
+          trackEvent({
+            eventType: 'generate_retry',
+            productId: product.id,
+            productNaam: product.naam,
+            montagetype,
+            kleur,
+            beslagKleur,
+          })
+        }
+
         const roomForGen = await resizeBlobForGeneration(
           foto.blob,
           MAX_GEN_INPUT_LONG_SIDE,
@@ -278,6 +301,7 @@ export default function App() {
           beslagKleur,
           montagetype,
           cacheKey,
+          sessionId: getAnalyticsSessionId(),
         })
 
         const mime = data.mimeType || 'image/png'
@@ -293,6 +317,8 @@ export default function App() {
           incrementGenerationCount()
         }
         setRemaining(remainingGenerations())
+
+        // generate_success wordt server-side gelogd (inclusief mock)
 
         const item: GeneratieResultaat = {
           id: crypto.randomUUID(),
@@ -324,6 +350,7 @@ export default function App() {
               montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
               imageBase64: data.imageBase64,
               mimeType: mime,
+              sessionId: getAnalyticsSessionId(),
               ...room,
             })
             setMailBevestiging({
@@ -333,6 +360,15 @@ export default function App() {
               emailed: mailRes.emailed,
             })
           } catch {
+            trackEvent({
+              eventType: 'mail_failed',
+              productId: product.id,
+              productNaam: product.naam,
+              montagetype,
+              kleur,
+              beslagKleur,
+              bron: 'mail',
+            })
             setMailBevestiging({
               naam: activeDelivery.naam,
               email: activeDelivery.email,
@@ -342,6 +378,16 @@ export default function App() {
           }
         }
       } catch (err) {
+        trackEvent({
+          eventType: 'generate_error',
+          productId: product?.id,
+          productNaam: product?.naam,
+          montagetype: montagetype ?? undefined,
+          kleur: kleur ?? undefined,
+          beslagKleur: beslagKleur ?? undefined,
+          errorMessage: err instanceof Error ? err.message : 'onbekend',
+          isRetry: opts.isRetry,
+        })
         setGenError(
           err instanceof Error
             ? err.message
@@ -392,7 +438,10 @@ export default function App() {
           <FotoUpload
             foto={foto}
             teksten={situatieTekst}
-            onLoaded={setFoto}
+            onLoaded={(next) => {
+              setFoto(next)
+              trackEvent({ eventType: 'foto_uploaded' })
+            }}
             onContinue={() => goTo('plan')}
           />
         )}
@@ -401,7 +450,15 @@ export default function App() {
           <MontagetypeKiezer
             options={actieveMontageOpties}
             value={montagetype}
-            onChange={setMontagetype}
+            onChange={(next) => {
+              setMontagetype(next)
+              if (next) {
+                trackEvent({
+                  eventType: 'montagetype_selected',
+                  montagetype: next,
+                })
+              }
+            }}
             onBack={() => goTo('situatie')}
             onContinue={() => goTo('catalogus')}
           />
@@ -425,6 +482,12 @@ export default function App() {
                 setProduct(p)
                 setKleur(null)
                 setBeslagKleur(null)
+                trackEvent({
+                  eventType: 'product_selected',
+                  productId: p.id,
+                  productNaam: p.naam,
+                  montagetype,
+                })
               }}
               onBack={() => goTo('plan')}
               onContinue={() => goTo('kleur')}
@@ -436,9 +499,28 @@ export default function App() {
           <KleurKiezer
             product={product}
             value={kleur}
-            onChange={setKleur}
+            onChange={(next) => {
+              setKleur(next)
+              trackEvent({
+                eventType: 'kleur_selected',
+                productId: product.id,
+                productNaam: product.naam,
+                montagetype: montagetype ?? undefined,
+                kleur: next,
+              })
+            }}
             beslagKleur={beslagKleur}
-            onBeslagKleurChange={setBeslagKleur}
+            onBeslagKleurChange={(next) => {
+              setBeslagKleur(next)
+              trackEvent({
+                eventType: 'beslag_selected',
+                productId: product.id,
+                productNaam: product.naam,
+                montagetype: montagetype ?? undefined,
+                kleur: kleur ?? undefined,
+                beslagKleur: next,
+              })
+            }}
             onBack={() => goTo('catalogus')}
             generating={generating}
             remaining={remaining}
@@ -540,8 +622,10 @@ export default function App() {
                       MONTAGETYPE_LABELS[montagetype] ?? montagetype,
                     imageBase64: mimeMatch.base64,
                     mimeType: mimeMatch.mime,
+                    sessionId: getAnalyticsSessionId(),
                     ...room,
                   })
+                  // offerte_requested wordt server-side gelogd
                 }}
                 mock={wasMock}
               />
@@ -555,6 +639,17 @@ export default function App() {
           onCancel={() => setShowDeliveryChoice(false)}
           onChoose={(choice) => {
             setShowDeliveryChoice(false)
+            trackEvent({
+              eventType:
+                choice.mode === 'mail' ? 'delivery_mail' : 'delivery_wait',
+              productId: product?.id,
+              productNaam: product?.naam,
+              montagetype: montagetype ?? undefined,
+              kleur: kleur ?? undefined,
+              beslagKleur: beslagKleur ?? undefined,
+              prijsindicatie:
+                choice.mode === 'mail' ? choice.prijsindicatie : undefined,
+            })
             if (choice.mode === 'mail') {
               setSessionEmail(choice.email)
               setRemaining(remainingGenerations())

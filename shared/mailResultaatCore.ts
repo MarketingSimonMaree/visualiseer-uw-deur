@@ -6,6 +6,7 @@ import {
   type MailTemplateId,
   type TemplateVars,
 } from './mailTemplates.ts'
+import { trackAnalyticsEvent } from './analyticsCore.ts'
 
 export type MailAttachment = {
   filename: string
@@ -29,6 +30,8 @@ export type MailResultaatInput = {
   /** Originele kamerfoto van de klant */
   roomImageBase64?: string
   roomMimeType?: string
+  sessionId?: string
+  beslagKleur?: string
 }
 
 export type MailResultaatOutput = {
@@ -283,6 +286,25 @@ export async function processMailResultaat(
     })
   }
 
-  // Geen PII in de database — alleen mails verstuurd.
+  // Geen PII in de database — alleen mails verstuurd + anonieme stats.
+  await trackAnalyticsEvent({
+    eventType:
+      body.bron === 'offerte'
+        ? emailed || leadsEmailed
+          ? 'offerte_requested'
+          : 'mail_failed'
+        : emailed
+          ? 'mail_sent'
+          : 'mail_failed',
+    productId: body.productId,
+    productNaam: body.productNaam,
+    montagetype: body.montagetype,
+    kleur: body.kleur,
+    beslagKleur: body.beslagKleur,
+    bron: body.bron,
+    prijsindicatie: body.prijsindicatie,
+    sessionId: body.sessionId,
+  })
+
   return { ok: true, emailed, leadsEmailed }
 }

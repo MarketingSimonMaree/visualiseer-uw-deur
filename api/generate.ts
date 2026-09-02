@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import OpenAI, { toFile } from 'openai'
+import { trackAnalyticsEvent } from '../shared/analyticsCore'
 
 export const config = {
   api: {
@@ -22,6 +23,7 @@ type GenBody = {
   kleur?: string
   beslagKleur?: string
   montagetype?: string
+  sessionId?: string
 }
 
 /** Best-effort limiet per IP binnen deze serverless instance. */
@@ -276,6 +278,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const ip = clientIp(req)
     if (!canGenerate(ip)) {
+      await trackAnalyticsEvent({
+        eventType: 'daily_limit_hit',
+        productId: body.productId,
+        productNaam: body.productNaam,
+        montagetype: body.montagetype,
+        kleur: body.kleur,
+        beslagKleur: body.beslagKleur,
+        sessionId: body.sessionId,
+        ip,
+      })
       return res.status(429).json({
         error: `Daglimiet bereikt (${DAILY_LIMIT} visualisaties per dag). Probeer het morgen opnieuw.`,
       })
@@ -286,6 +298,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!apiKey) {
       // Demo zonder key — geen crash
+      await trackAnalyticsEvent({
+        eventType: 'generate_success',
+        productId: body.productId,
+        productNaam: body.productNaam,
+        montagetype: body.montagetype,
+        kleur: body.kleur,
+        beslagKleur: body.beslagKleur,
+        sessionId: body.sessionId,
+        isMock: true,
+        ip,
+      })
       return res.status(200).json({
         imageBase64: room.buffer.toString('base64'),
         mimeType: room.mime,
@@ -340,10 +363,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const imageBase64 = result.data?.[0]?.b64_json
     if (!imageBase64) {
+      await trackAnalyticsEvent({
+        eventType: 'generate_error',
+        productId: body.productId,
+        productNaam: body.productNaam,
+        montagetype: body.montagetype,
+        kleur: body.kleur,
+        beslagKleur: body.beslagKleur,
+        sessionId: body.sessionId,
+        errorMessage: 'Model gaf geen afbeelding terug.',
+        ip,
+      })
       return res.status(500).json({ error: 'Model gaf geen afbeelding terug.' })
     }
 
     consume(ip)
+    await trackAnalyticsEvent({
+      eventType: 'generate_success',
+      productId: body.productId,
+      productNaam: body.productNaam,
+      montagetype: body.montagetype,
+      kleur: body.kleur,
+      beslagKleur: body.beslagKleur,
+      sessionId: body.sessionId,
+      isMock: false,
+      ip,
+    })
     return res.status(200).json({
       imageBase64,
       mimeType: 'image/png',
@@ -351,6 +396,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   } catch (err) {
     console.error('[api/generate]', err)
+    try {
+      const body = (req.body ?? {}) as GenBody
+      await trackAnalyticsEvent({
+        eventType: 'generate_error',
+        productId: body.productId,
+        productNaam: body.productNaam,
+        montagetype: body.montagetype,
+        kleur: body.kleur,
+        beslagKleur: body.beslagKleur,
+        sessionId: body.sessionId,
+        errorMessage: errorMessage(err),
+        ip: clientIp(req),
+      })
+    } catch {
+      // ignore analytics errors
+    }
     return res.status(500).json({ error: errorMessage(err) })
   }
 }

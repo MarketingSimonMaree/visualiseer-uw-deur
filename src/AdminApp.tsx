@@ -33,6 +33,7 @@ import {
   type SituatieTekst,
 } from './lib/adminApi'
 import { AdminFiltersTab } from './components/AdminFiltersTab'
+import { AdminStatsTab } from './components/AdminStatsTab'
 import { AdminTekstenTab } from './components/AdminTekstenTab'
 import {
   MONTAGETYPE_LABELS,
@@ -42,6 +43,7 @@ import {
 } from './types/product'
 
 type Tab =
+  | 'stats'
   | 'producten'
   | 'collecties'
   | 'montagetypes'
@@ -421,6 +423,7 @@ export default function AdminApp() {
         <nav className="flex flex-wrap gap-2 border-b border-[var(--colorBorder)] pb-3">
           {(
             [
+              ['stats', 'Statistieken'],
               ['producten', 'Producten'],
               ['collecties', 'Collecties'],
               ['filters', 'Filters'],
@@ -452,7 +455,11 @@ export default function AdminApp() {
             {error}
           </p>
         )}
-        {loading && <p className="mt-6 text-[var(--colorDarkGray)]">Laden…</p>}
+        {loading && tab !== 'stats' && (
+          <p className="mt-6 text-[var(--colorDarkGray)]">Laden…</p>
+        )}
+
+        {tab === 'stats' && <AdminStatsTab />}
 
         {!loading && tab === 'producten' && (
           <>

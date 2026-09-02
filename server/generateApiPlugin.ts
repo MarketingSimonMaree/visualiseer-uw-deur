@@ -32,6 +32,12 @@ import {
   saveAdminTeksten,
   upsertAdminFilter,
 } from './contentAdminCore.ts'
+import {
+  fetchStatsOverview,
+  isAllowedEventType,
+  trackAnalyticsEvent,
+  type StatsRangeDays,
+} from '../shared/analyticsCore.ts'
 
 function loadEnvKey(root: string): string | undefined {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY
@@ -1033,6 +1039,74 @@ export function generateApiPlugin(): Plugin {
             return
           }
 
+          if (pathname === '/api/analytics') {
+            if (req.method === 'GET') {
+              const auth = req.headers.authorization
+              const token = bearerToken(
+                Array.isArray(auth) ? auth[0] : auth,
+              )
+              if (!verifyAdminToken(token, loadAdminSecret(root))) {
+                sendJson(res, 401, { error: 'Niet ingelogd' })
+                return
+              }
+              const daysRaw = Number(new URL(url, 'http://x').searchParams.get('days'))
+              const days = (
+                daysRaw === 7 || daysRaw === 90 ? daysRaw : 30
+              ) as StatsRangeDays
+              sendJson(res, 200, await fetchStatsOverview(days))
+              return
+            }
+            if (req.method === 'POST') {
+              const body = (await readJsonBody(req)) as {
+                eventType?: string
+                productId?: string
+                productNaam?: string
+                montagetype?: string
+                kleur?: string
+                beslagKleur?: string
+                bron?: string
+                prijsindicatie?: boolean
+                fromCache?: boolean
+                isRetry?: boolean
+                isMock?: boolean
+                errorMessage?: string
+                sessionId?: string
+                meta?: Record<string, unknown>
+              }
+              const eventType = String(body.eventType ?? '').trim()
+              if (!isAllowedEventType(eventType)) {
+                sendJson(res, 400, { error: 'Ongeldig eventType' })
+                return
+              }
+              const ip = getClientIp(
+                req.headers as Record<string, string | string[] | undefined>,
+                req.socket?.remoteAddress,
+              )
+              await trackAnalyticsEvent({
+                eventType,
+                productId: body.productId,
+                productNaam: body.productNaam,
+                montagetype: body.montagetype,
+                kleur: body.kleur,
+                beslagKleur: body.beslagKleur,
+                bron: body.bron,
+                prijsindicatie: body.prijsindicatie,
+                fromCache: body.fromCache,
+                isRetry: body.isRetry,
+                isMock: body.isMock,
+                errorMessage: body.errorMessage,
+                sessionId: body.sessionId,
+                ip,
+                meta: body.meta,
+              })
+              res.statusCode = 204
+              res.end()
+              return
+            }
+            sendJson(res, 405, { error: 'Method not allowed' })
+            return
+          }
+
           if (pathname === '/api/mail-resultaat') {
             if (req.method !== 'POST') {
               sendJson(res, 405, { error: 'Alleen POST is toegestaan.' })
@@ -1053,6 +1127,8 @@ export function generateApiPlugin(): Plugin {
                 mimeType?: string
                 roomImageBase64?: string
                 roomMimeType?: string
+                sessionId?: string
+                beslagKleur?: string
               }
               if (
                 !process.env.DATABASE_URL ||
@@ -1088,6 +1164,8 @@ export function generateApiPlugin(): Plugin {
                 mimeType: body.mimeType,
                 roomImageBase64: body.roomImageBase64,
                 roomMimeType: body.roomMimeType,
+                sessionId: body.sessionId,
+                beslagKleur: body.beslagKleur,
               })
               sendJson(res, 200, result)
             } catch (err) {

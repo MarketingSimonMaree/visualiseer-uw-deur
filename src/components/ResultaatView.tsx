@@ -5,6 +5,7 @@ import type { GeneratieResultaat, Product } from '../types/product'
 import { ResultaatStrip } from './ResultaatStrip'
 import type { KlantGegevens } from './KlantGegevensForm'
 import { BESLAG_KLEUREN } from '../data/beslagKleuren'
+import { trackEvent } from '../lib/analytics'
 
 interface Props {
   resultaat: GeneratieResultaat
@@ -38,6 +39,13 @@ export function ResultaatView({
     setBusy(true)
     try {
       await downloadResultaat(resultaat.imageUrl)
+      trackEvent({
+        eventType: 'result_downloaded',
+        productId: resultaat.productId,
+        productNaam: resultaat.productNaam,
+        kleur: resultaat.kleur,
+        beslagKleur: resultaat.beslagKleur,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Download mislukt.')
     } finally {

@@ -12,6 +12,8 @@ export type MailResultaatRequest = {
   mimeType: string
   roomImageBase64?: string
   roomMimeType?: string
+  sessionId?: string
+  beslagKleur?: string
 }
 
 export type MailResultaatResponse = {

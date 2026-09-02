@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
+import { trackAnalyticsEvent } from '../shared/analyticsCore'
 
 export const config = { maxDuration: 60 }
 
@@ -184,6 +185,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       mimeType?: string
       roomImageBase64?: string
       roomMimeType?: string
+      sessionId?: string
+      beslagKleur?: string
     }
 
     const naam = (body.naam ?? '').trim()
@@ -265,6 +268,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         attachments,
       })
     }
+
+    await trackAnalyticsEvent({
+      eventType:
+        bron === 'offerte'
+          ? emailed || leadsEmailed
+            ? 'offerte_requested'
+            : 'mail_failed'
+          : emailed
+            ? 'mail_sent'
+            : 'mail_failed',
+      productId: body.productId,
+      productNaam: body.productNaam,
+      montagetype: body.montagetype,
+      kleur: body.kleur,
+      beslagKleur: body.beslagKleur,
+      bron,
+      prijsindicatie,
+      sessionId: body.sessionId,
+    })
 
     res.status(200).json({ ok: true, emailed, leadsEmailed })
   } catch (err) {

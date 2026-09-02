@@ -12,6 +12,7 @@ export interface GenerateRequestBody {
   beslagKleur?: string
   montagetype: Montagetype
   cacheKey: string
+  sessionId?: string
 }
 
 export interface GenerateResponseBody {

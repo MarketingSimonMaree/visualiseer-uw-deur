@@ -353,3 +353,39 @@ export async function deleteAdminFilter(id: string): Promise<void> {
     body: JSON.stringify({ id }),
   })
 }
+
+export type AdminStatsOverview = {
+  range: { days: number; from: string; to: string }
+  kpis: {
+    sessions: number
+    fotoUploads: number
+    visualisaties: number
+    cacheHits: number
+    fouten: number
+    mails: number
+    offertes: number
+    downloads: number
+    conversiePct: number
+  }
+  daily: Array<{
+    date: string
+    visualisaties: number
+    mails: number
+    offertes: number
+    fotoUploads: number
+    fouten: number
+  }>
+  funnel: Array<{ step: string; label: string; count: number }>
+  topProducts: Array<{ id: string; naam: string; count: number }>
+  topKleuren: Array<{ naam: string; count: number }>
+  topMontagetypes: Array<{ id: string; count: number }>
+  topBeslag: Array<{ id: string; count: number }>
+  eventsByType: Array<{ type: string; count: number }>
+}
+
+export async function fetchAdminStats(
+  days: 7 | 30 | 90 = 30,
+): Promise<AdminStatsOverview> {
+  return adminFetch<AdminStatsOverview>(`/api/analytics?days=${days}`)
+}
+
