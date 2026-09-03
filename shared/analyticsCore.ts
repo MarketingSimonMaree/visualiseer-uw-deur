@@ -166,7 +166,7 @@ export async function trackAnalyticsEvent(
         ${input.errorMessage?.trim()?.slice(0, 500) || null},
         ${input.sessionId?.trim()?.slice(0, 80) || null},
         ${hashIp(input.ip)},
-        ${metaJson}::jsonb
+        ${metaJson}
       )
     `
   } catch (err) {

@@ -1,6 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createHmac, timingSafeEqual } from 'crypto'
+import {
+  fetchStatsOverview,
+  isAllowedEventType,
+  trackAnalyticsEvent,
+  type StatsRangeDays,
+} from '../shared/analyticsCore'
 
 export const config = { maxDuration: 30 }
 
@@ -194,7 +200,15 @@ function resourceOf(req: VercelRequest): string {
   const url = typeof req.url === 'string' ? req.url : ''
   if (url.includes('admin-teksten') || url.includes('teksten')) return 'teksten'
   if (url.includes('admin-filters') || url.includes('filters')) return 'filters'
+  if (url.includes('analytics')) return 'analytics'
   return 'content'
+}
+
+function clientIp(req: VercelRequest): string {
+  const xf = req.headers['x-forwarded-for']
+  if (typeof xf === 'string' && xf.length > 0) return xf.split(',')[0]!.trim()
+  if (Array.isArray(xf) && xf[0]) return String(xf[0]).split(',')[0]!.trim()
+  return req.socket?.remoteAddress ?? 'unknown'
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -285,6 +299,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('[api/site content]', err)
       res.status(200).json({ situatie: DEFAULT_SITUATIE, filters: [], montagetypes: [] })
     }
+    return
+  }
+
+  // Analytics vóór admin-auth: POST is publiek (track), GET vereist login
+  if (resource === 'analytics') {
+    if (req.method === 'OPTIONS') {
+      res.status(204).end()
+      return
+    }
+    if (req.method === 'GET') {
+      if (!requireAuth(req)) {
+        res.status(401).json({ error: 'Niet ingelogd' })
+        return
+      }
+      try {
+        const daysRaw = Number(req.query.days)
+        const days = (
+          daysRaw === 7 || daysRaw === 90 ? daysRaw : 30
+        ) as StatsRangeDays
+        const overview = await fetchStatsOverview(days)
+        res.status(200).json(overview)
+      } catch (err) {
+        console.error('[api/site analytics]', err)
+        res.status(500).json({
+          error: err instanceof Error ? err.message : 'Statistieken mislukt',
+        })
+      }
+      return
+    }
+    if (req.method === 'POST') {
+      const body = (req.body ?? {}) as {
+        eventType?: string
+        productId?: string
+        productNaam?: string
+        montagetype?: string
+        kleur?: string
+        beslagKleur?: string
+        bron?: string
+        prijsindicatie?: boolean
+        fromCache?: boolean
+        isRetry?: boolean
+        isMock?: boolean
+        errorMessage?: string
+        sessionId?: string
+        meta?: Record<string, unknown>
+      }
+      const eventType = String(body.eventType ?? '').trim()
+      if (!isAllowedEventType(eventType)) {
+        res.status(400).json({ error: 'Ongeldig eventType' })
+        return
+      }
+      void trackAnalyticsEvent({
+        eventType,
+        productId: body.productId,
+        productNaam: body.productNaam,
+        montagetype: body.montagetype,
+        kleur: body.kleur,
+        beslagKleur: body.beslagKleur,
+        bron: body.bron,
+        prijsindicatie: body.prijsindicatie,
+        fromCache: body.fromCache,
+        isRetry: body.isRetry,
+        isMock: body.isMock,
+        errorMessage: body.errorMessage,
+        sessionId: body.sessionId,
+        ip: clientIp(req),
+        meta: body.meta,
+      })
+      res.status(204).end()
+      return
+    }
+    res.status(405).json({ error: 'Method not allowed' })
     return
   }
 

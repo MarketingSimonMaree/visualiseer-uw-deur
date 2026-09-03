@@ -257,6 +257,17 @@ export default function App() {
               }
               try {
                 const mailRes = await requestMailResultaat(payload)
+                trackEvent({
+                  eventType: mailRes.emailed ? 'mail_sent' : 'mail_failed',
+                  productId: product.id,
+                  productNaam: product.naam,
+                  montagetype,
+                  kleur,
+                  beslagKleur,
+                  bron: 'mail',
+                  prijsindicatie: activeDelivery.prijsindicatie,
+                  fromCache: true,
+                })
                 setMailBevestiging({
                   naam: activeDelivery.naam,
                   email: activeDelivery.email,
@@ -264,6 +275,16 @@ export default function App() {
                   emailed: mailRes.emailed,
                 })
               } catch {
+                trackEvent({
+                  eventType: 'mail_failed',
+                  productId: product.id,
+                  productNaam: product.naam,
+                  montagetype,
+                  kleur,
+                  beslagKleur,
+                  bron: 'mail',
+                  fromCache: true,
+                })
                 setMailBevestiging({
                   naam: activeDelivery.naam,
                   email: activeDelivery.email,
@@ -318,7 +339,19 @@ export default function App() {
         }
         setRemaining(remainingGenerations())
 
-        // generate_success wordt server-side gelogd (inclusief mock)
+        setRemaining(remainingGenerations())
+
+        trackEvent({
+          eventType: 'generate_success',
+          productId: product.id,
+          productNaam: product.naam,
+          montagetype,
+          kleur,
+          beslagKleur,
+          isMock: Boolean(data.mock),
+          isRetry: opts.isRetry,
+          fromCache: false,
+        })
 
         const item: GeneratieResultaat = {
           id: crypto.randomUUID(),
@@ -358,6 +391,16 @@ export default function App() {
               email: activeDelivery.email,
               prijsindicatie: activeDelivery.prijsindicatie,
               emailed: mailRes.emailed,
+            })
+            trackEvent({
+              eventType: mailRes.emailed ? 'mail_sent' : 'mail_failed',
+              productId: product.id,
+              productNaam: product.naam,
+              montagetype,
+              kleur,
+              beslagKleur,
+              bron: 'mail',
+              prijsindicatie: activeDelivery.prijsindicatie,
             })
           } catch {
             trackEvent({
@@ -625,7 +668,16 @@ export default function App() {
                     sessionId: getAnalyticsSessionId(),
                     ...room,
                   })
-                  // offerte_requested wordt server-side gelogd
+                  trackEvent({
+                    eventType: 'offerte_requested',
+                    productId: product.id,
+                    productNaam: product.naam,
+                    montagetype,
+                    kleur: actief.kleur,
+                    beslagKleur: actief.beslagKleur ?? beslagKleur ?? undefined,
+                    bron: 'offerte',
+                    prijsindicatie: true,
+                  })
                 }}
                 mock={wasMock}
               />

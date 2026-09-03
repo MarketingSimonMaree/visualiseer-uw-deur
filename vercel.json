@@ -12,6 +12,10 @@
       "destination": "/api/site?resource=filters"
     },
     {
+      "source": "/api/analytics",
+      "destination": "/api/site?resource=analytics"
+    },
+    {
       "source": "/api/admin-password",
       "destination": "/api/admin-login?action=password"
     }

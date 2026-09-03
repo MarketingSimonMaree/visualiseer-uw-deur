@@ -11,7 +11,6 @@ import {
 import { DEFAULT_AGENT_PROMPTS, type Montagetype } from '../src/types/product.ts'
 import { buildGeneratePrompt } from '../src/lib/prompt.ts'
 import { beslagKleurPromptLabel } from '../src/data/beslagKleuren.ts'
-import { trackAnalyticsEvent } from '../shared/analyticsCore.ts'
 
 export type GenBody = {
   roomImageBase64: string
@@ -197,17 +196,6 @@ export async function runGeneration(
   const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY
 
   if (!apiKey) {
-    await trackAnalyticsEvent({
-      eventType: 'generate_success',
-      productId: body.productId,
-      productNaam: body.productNaam,
-      montagetype: body.montagetype,
-      kleur: body.kleur,
-      beslagKleur: body.beslagKleur,
-      sessionId: body.sessionId,
-      isMock: true,
-      ip: opts.ip,
-    })
     return {
       imageBase64: room.buffer.toString('base64'),
       mimeType: room.mime,
@@ -216,16 +204,6 @@ export async function runGeneration(
   }
 
   if (opts.ip && !canGenerateToday(opts.ip)) {
-    await trackAnalyticsEvent({
-      eventType: 'daily_limit_hit',
-      productId: body.productId,
-      productNaam: body.productNaam,
-      montagetype: body.montagetype,
-      kleur: body.kleur,
-      beslagKleur: body.beslagKleur,
-      sessionId: body.sessionId,
-      ip: opts.ip,
-    })
     const err = new Error(dailyLimitMessage())
     ;(err as Error & { statusCode?: number }).statusCode = 429
     throw err
@@ -366,33 +344,10 @@ export async function runGeneration(
 
   const imageBase64 = result.data?.[0]?.b64_json
   if (!imageBase64) {
-    await trackAnalyticsEvent({
-      eventType: 'generate_error',
-      productId: body.productId,
-      productNaam: body.productNaam,
-      montagetype,
-      kleur: body.kleur,
-      beslagKleur: body.beslagKleur,
-      sessionId: body.sessionId,
-      errorMessage: 'Model gaf geen afbeelding terug.',
-      ip: opts.ip,
-    })
     throw new Error('Model gaf geen afbeelding terug.')
   }
 
   if (opts.ip) consumeDailyLimit(opts.ip)
-
-  await trackAnalyticsEvent({
-    eventType: 'generate_success',
-    productId: body.productId,
-    productNaam: body.productNaam,
-    montagetype,
-    kleur: body.kleur,
-    beslagKleur: body.beslagKleur,
-    sessionId: body.sessionId,
-    isMock: false,
-    ip: opts.ip,
-  })
 
   return { imageBase64, mimeType: 'image/png', mock: false }
 }
