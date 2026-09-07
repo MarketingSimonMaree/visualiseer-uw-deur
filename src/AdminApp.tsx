@@ -35,6 +35,7 @@ import {
 import { AdminFiltersTab } from './components/AdminFiltersTab'
 import { AdminStatsTab } from './components/AdminStatsTab'
 import { AdminTekstenTab } from './components/AdminTekstenTab'
+import { buildVisualiseerProductUrl } from './lib/deepLink'
 import {
   MONTAGETYPE_LABELS,
   type Materiaal,
@@ -535,8 +536,28 @@ export default function AdminApp() {
                       {(p.montagetypes ?? [p.montagetype]).join(', ')} ·{' '}
                       {p.collectie}
                     </p>
+                    <p className="mt-1 font-mono text-xs text-[var(--colorDarkGray)]">
+                      ?product={p.id}
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-[var(--colorBorder)] px-3 py-1.5 text-sm"
+                      onClick={() => {
+                        const url = buildVisualiseerProductUrl(p.id)
+                        void navigator.clipboard.writeText(url).then(
+                          () => {
+                            window.alert(`Link gekopieerd:\n${url}`)
+                          },
+                          () => {
+                            window.prompt('Kopieer deze link:', url)
+                          },
+                        )
+                      }}
+                    >
+                      Kopieer link
+                    </button>
                     <button
                       type="button"
                       className="rounded-full border border-[var(--colorBorder)] px-3 py-1.5 text-sm"

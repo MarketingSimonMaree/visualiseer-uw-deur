@@ -30,6 +30,12 @@ import {
 } from './lib/contentApi'
 import type { SituatieTekst } from './lib/adminApi'
 import { BESLAG_KLEUREN } from './data/beslagKleuren'
+import {
+  clearDeepLinkFromUrl,
+  parseDeepLink,
+  productMontagetypes,
+  resolveMontagetypeForProduct,
+} from './lib/deepLink'
 import type {
   AppStep,
   GeneratieResultaat,
@@ -84,6 +90,9 @@ export default function App() {
   const [montagetype, setMontagetype] = useState<Montagetype | null>(null)
   const [foto, setFoto] = useState<KamerFoto | null>(null)
   const [product, setProduct] = useState<Product | null>(null)
+  /** Product vastgezet via ?product= — catalogus wordt overgeslagen. */
+  const [productLocked, setProductLocked] = useState(false)
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null)
   const [kleur, setKleur] = useState<string | null>(null)
   const [beslagKleur, setBeslagKleur] = useState<string | null>(null)
 
@@ -130,19 +139,25 @@ export default function App() {
   })
 
   const actieveMontageOpties = useMemo(() => {
-    return montagetypeOpties.filter((m) => {
+    const base = montagetypeOpties.filter((m) => {
       if (m.actief === false) return false
       return producten.some((p) => {
         const types = p.montagetypes?.length ? p.montagetypes : [p.montagetype]
         return types.includes(m.id)
       })
     })
-  }, [montagetypeOpties, producten])
+    if (productLocked && product) {
+      const allowed = new Set(productMontagetypes(product))
+      return base.filter((m) => allowed.has(m.id))
+    }
+    return base
+  }, [montagetypeOpties, producten, productLocked, product])
 
   const actief = geschiedenis.find((g) => g.id === actiefId) ?? null
 
   useEffect(() => {
     let cancelled = false
+    const link = parseDeepLink()
     void Promise.all([fetchProducten(), fetchSiteContent()])
       .then(([lijst, content]) => {
         if (cancelled) return
@@ -157,6 +172,34 @@ export default function App() {
             deurGroep: m.deurGroep === 'buiten' ? 'buiten' : 'binnen',
           })),
         )
+
+        if (link.productId) {
+          const found = lijst.find(
+            (p) => p.id.toLowerCase() === link.productId!.toLowerCase(),
+          )
+          if (found) {
+            setProduct(found)
+            setProductLocked(true)
+            setKleur(null)
+            setBeslagKleur(null)
+            const montage = resolveMontagetypeForProduct(
+              found,
+              link.montageId,
+            )
+            if (montage) setMontagetype(montage)
+            trackEvent({
+              eventType: 'product_selected',
+              productId: found.id,
+              productNaam: found.naam,
+              montagetype: montage ?? undefined,
+              meta: { source: 'deeplink' },
+            })
+          } else {
+            setDeepLinkError(
+              `Deurmodel “${link.productId}” is niet gevonden of niet actief.`,
+            )
+          }
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -175,6 +218,36 @@ export default function App() {
     setStep(next)
     setMaxReached((prev) => maxStep(prev, next))
   }, [])
+
+  function unlockProduct() {
+    setProductLocked(false)
+    setProduct(null)
+    setKleur(null)
+    setBeslagKleur(null)
+    setDeepLinkError(null)
+    clearDeepLinkFromUrl()
+  }
+
+  /** Na foto: met vast product naar kleur (of plan als montage nog openstaat). */
+  function continueAfterFoto() {
+    if (productLocked && product) {
+      if (montagetype) {
+        goTo('kleur')
+        return
+      }
+      goTo('plan')
+      return
+    }
+    goTo('plan')
+  }
+
+  function continueAfterPlan() {
+    if (productLocked && product) {
+      goTo('kleur')
+      return
+    }
+    goTo('catalogus')
+  }
 
   const runGenerate = useCallback(
     async (opts: { isRetry: boolean; delivery?: DeliveryChoice }) => {
@@ -461,8 +534,10 @@ export default function App() {
   function navigateStep(id: FlowStepId) {
     if (id === 'situatie') goTo('situatie')
     else if (id === 'plan' && foto) goTo('plan')
-    else if (id === 'catalogus' && foto && montagetype) goTo('catalogus')
-    else if (id === 'kleur' && foto && montagetype && product) goTo('kleur')
+    else if (id === 'catalogus' && foto && montagetype) {
+      if (productLocked && product) goTo('kleur')
+      else goTo('catalogus')
+    } else if (id === 'kleur' && foto && montagetype && product) goTo('kleur')
   }
 
   return (
@@ -477,15 +552,24 @@ export default function App() {
       </header>
 
       <main className="flex min-h-0 flex-1 flex-col">
+        {deepLinkError && step === 'situatie' && (
+          <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6">
+            <p className="note-banner text-sm" role="status">
+              {deepLinkError} U kunt gewoon een deur kiezen in de catalogus.
+            </p>
+          </div>
+        )}
+
         {step === 'situatie' && (
           <FotoUpload
             foto={foto}
             teksten={situatieTekst}
+            preselectedProduct={productLocked ? product : null}
             onLoaded={(next) => {
               setFoto(next)
               trackEvent({ eventType: 'foto_uploaded' })
             }}
-            onContinue={() => goTo('plan')}
+            onContinue={continueAfterFoto}
           />
         )}
 
@@ -503,7 +587,7 @@ export default function App() {
               }
             }}
             onBack={() => goTo('situatie')}
-            onContinue={() => goTo('catalogus')}
+            onContinue={continueAfterPlan}
           />
         )}
 
@@ -523,6 +607,7 @@ export default function App() {
               selectedId={product?.id ?? null}
               onSelect={(p) => {
                 setProduct(p)
+                setProductLocked(false)
                 setKleur(null)
                 setBeslagKleur(null)
                 trackEvent({
@@ -564,7 +649,9 @@ export default function App() {
                 beslagKleur: next,
               })
             }}
-            onBack={() => goTo('catalogus')}
+            onBack={() =>
+              productLocked ? goTo('situatie') : goTo('catalogus')
+            }
             generating={generating}
             remaining={remaining}
             onGenerate={() => {
@@ -609,7 +696,11 @@ export default function App() {
                   <button
                     type="button"
                     className="back-link !mb-0"
-                    onClick={() => goTo('catalogus')}
+                    onClick={() => {
+                      unlockProduct()
+                      if (montagetype) goTo('catalogus')
+                      else goTo('plan')
+                    }}
                   >
                     Andere deur kiezen
                   </button>
@@ -627,7 +718,11 @@ export default function App() {
                   prijsindicatie={mailBevestiging.prijsindicatie}
                   emailed={mailBevestiging.emailed}
                   onBekijkResultaat={() => setForceShowResult(true)}
-                  onAndereDeur={() => goTo('catalogus')}
+                  onAndereDeur={() => {
+                    unlockProduct()
+                    if (montagetype) goTo('catalogus')
+                    else goTo('plan')
+                  }}
                 />
               )}
 
@@ -644,7 +739,11 @@ export default function App() {
                 geschiedenis={geschiedenis}
                 onSelectResultaat={setActiefId}
                 onRetry={() => void runGenerate({ isRetry: true })}
-                onAndereDeur={() => goTo('catalogus')}
+                onAndereDeur={() => {
+                  unlockProduct()
+                  if (montagetype) goTo('catalogus')
+                  else goTo('plan')
+                }}
                 onOfferte={async (gegevens: KlantGegevens) => {
                   setSessionEmail(gegevens.email)
                   const mimeMatch = parseDataUrl(actief.imageUrl)

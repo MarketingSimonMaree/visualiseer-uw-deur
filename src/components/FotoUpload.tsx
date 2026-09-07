@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ImageLoadError, loadKamerFoto } from '../lib/imageLoader'
 import type { SituatieTekst } from '../lib/adminApi'
-import type { KamerFoto } from '../types/product'
+import type { KamerFoto, Product } from '../types/product'
 
 /** Voorbeeldfoto van simonmaree.nl — hoe de klant moet fotograferen. */
 const VOORBEELD_FOTO_URL =
@@ -10,11 +10,19 @@ const VOORBEELD_FOTO_URL =
 interface Props {
   foto: KamerFoto | null
   teksten: SituatieTekst
+  /** Vastgezet deurmodel via deeplink (?product=). */
+  preselectedProduct?: Product | null
   onLoaded: (foto: KamerFoto) => void
   onContinue: () => void
 }
 
-export function FotoUpload({ foto, teksten, onLoaded, onContinue }: Props) {
+export function FotoUpload({
+  foto,
+  teksten,
+  preselectedProduct,
+  onLoaded,
+  onContinue,
+}: Props) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -45,13 +53,36 @@ export function FotoUpload({ foto, teksten, onLoaded, onContinue }: Props) {
 
   return (
     <section className="page">
+      {preselectedProduct && (
+        <div className="mb-5 flex items-center gap-4 rounded-[var(--borderRadius)] border border-[var(--colorGray)] bg-white p-4 shadow-[0_6px_20px_rgba(0,0,0,0.04)]">
+          <img
+            src={preselectedProduct.afbeeldingUrl}
+            alt=""
+            className="h-24 w-16 object-contain"
+          />
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-[var(--colorDarkGray)]">
+              Gekozen model
+            </p>
+            <p className="font-bold">{preselectedProduct.naam}</p>
+            <p className="text-sm text-[var(--colorDarkGray)]">
+              {preselectedProduct.collectie}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="situatie-grid">
         <div>
           <div className="page-intro">
             <h1 className="section-title">
               <span className="gold">{teksten.titelGold}</span> {teksten.titel}
             </h1>
-            <p className="lead">{teksten.lead}</p>
+            <p className="lead">
+              {preselectedProduct
+                ? `Upload een foto van de deuropening. Daarna kiest u kleur en beslag voor ${preselectedProduct.naam}.`
+                : teksten.lead}
+            </p>
           </div>
 
           {teksten.tips.length > 0 && (
