@@ -37,7 +37,7 @@ import {
   isAllowedEventType,
   trackAnalyticsEvent,
   type StatsRangeDays,
-} from '../shared/analyticsCore.ts'
+} from '../api/_lib/analyticsCore.ts'
 
 function loadEnvKey(root: string): string | undefined {
   if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY
