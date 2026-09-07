@@ -6,6 +6,7 @@ import { ResultaatStrip } from './ResultaatStrip'
 import type { KlantGegevens } from './KlantGegevensForm'
 import { BESLAG_KLEUREN } from '../data/beslagKleuren'
 import { trackEvent } from '../lib/analytics'
+import { AiDisclosure } from './AiDisclosure'
 
 interface Props {
   resultaat: GeneratieResultaat
@@ -65,6 +66,7 @@ export function ResultaatView({
             {beslagNaam ? ` · beslag ${beslagNaam}` : ''}
             {resultaat.fromCache ? ' · uit cache' : ''}
           </p>
+          <AiDisclosure />
         </div>
 
         {mock && (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Product } from '../types/product'
 import { BESLAG_KLEUREN } from '../data/beslagKleuren'
+import { AiDisclosure } from './AiDisclosure'
 
 interface Props {
   product: Product
@@ -46,6 +47,7 @@ export function GeneratieVoortgang({
             ? 'Dit duurt meestal 15–30 seconden. Daarna sturen wij het resultaat naar uw e-mail.'
             : 'Dit duurt meestal 15–30 seconden. Uw foto en gekozen deur blijven zichtbaar.'}
         </p>
+        <AiDisclosure />
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">

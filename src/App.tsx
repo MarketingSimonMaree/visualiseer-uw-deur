@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AiDisclosure } from './components/AiDisclosure'
 import { EmailGate } from './components/EmailGate'
 import { FotoUpload } from './components/FotoUpload'
 import { GeneratieVoortgang } from './components/GeneratieVoortgang'
@@ -22,6 +23,7 @@ import { blobToDataUrl, resizeBlobForGeneration } from './lib/imageLoader'
 import { buildCacheKey } from './lib/hash'
 import { requestGeneration } from './lib/generate'
 import { requestMailResultaat } from './lib/mailResultaat'
+import { watermarkImageToBase64 } from './lib/download'
 import { trackEvent, getAnalyticsSessionId } from './lib/analytics'
 import { fetchProducten } from './lib/productenApi'
 import {
@@ -82,6 +84,15 @@ async function roomImageForMail(foto: KamerFoto): Promise<{
   const dataUrl = await blobToDataUrl(resized)
   const parsed = parseDataUrl(dataUrl)
   return { roomImageBase64: parsed.base64, roomMimeType: parsed.mime }
+}
+
+/** Visualisatie voor e-mail: zelfde AI-watermerk als bij download. */
+async function resultaatImageForMail(imageUrl: string): Promise<{
+  imageBase64: string
+  mimeType: string
+}> {
+  const marked = await watermarkImageToBase64(imageUrl)
+  return { imageBase64: marked.base64, mimeType: marked.mimeType }
 }
 
 export default function App() {
@@ -311,8 +322,8 @@ export default function App() {
             setActiefId(item.id)
 
             if (activeDelivery.mode === 'mail') {
-              const mimeMatch = /^data:([^;]+);base64,(.+)$/i.exec(cached)
               const room = await roomImageForMail(foto)
+              const marked = await resultaatImageForMail(cached)
               const payload = {
                 naam: activeDelivery.naam,
                 woonplaats: activeDelivery.woonplaats,
@@ -323,8 +334,8 @@ export default function App() {
                 productNaam: product.naam,
                 kleur: kleurVoorMail(kleur, beslagKleur),
                 montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
-                imageBase64: mimeMatch?.[2] ?? cached,
-                mimeType: mimeMatch?.[1] ?? 'image/png',
+                imageBase64: marked.imageBase64,
+                mimeType: marked.mimeType,
                 sessionId: getAnalyticsSessionId(),
                 ...room,
               }
@@ -444,6 +455,7 @@ export default function App() {
         if (activeDelivery.mode === 'mail') {
           const room = await roomImageForMail(foto)
           try {
+            const marked = await resultaatImageForMail(imageUrl)
             const mailRes = await requestMailResultaat({
               naam: activeDelivery.naam,
               woonplaats: activeDelivery.woonplaats,
@@ -454,8 +466,8 @@ export default function App() {
               productNaam: product.naam,
               kleur: kleurVoorMail(kleur, beslagKleur),
               montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
-              imageBase64: data.imageBase64,
-              mimeType: mime,
+              imageBase64: marked.imageBase64,
+              mimeType: marked.mimeType,
               sessionId: getAnalyticsSessionId(),
               ...room,
             })
@@ -543,7 +555,10 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <p className="app-brand">Simon Maree · Deurvisualisator</p>
+        <p className="app-brand">
+          Simon Maree · Deurvisualisator
+          <AiDisclosure compact />
+        </p>
         <Stappenplan
           current={step}
           maxReached={maxReached}
@@ -746,7 +761,7 @@ export default function App() {
                 }}
                 onOfferte={async (gegevens: KlantGegevens) => {
                   setSessionEmail(gegevens.email)
-                  const mimeMatch = parseDataUrl(actief.imageUrl)
+                  const marked = await resultaatImageForMail(actief.imageUrl)
                   const room = await roomImageForMail(foto)
                   await requestMailResultaat({
                     naam: gegevens.naam,
@@ -762,8 +777,8 @@ export default function App() {
                     ),
                     montagetype:
                       MONTAGETYPE_LABELS[montagetype] ?? montagetype,
-                    imageBase64: mimeMatch.base64,
-                    mimeType: mimeMatch.mime,
+                    imageBase64: marked.imageBase64,
+                    mimeType: marked.mimeType,
                     sessionId: getAnalyticsSessionId(),
                     ...room,
                   })
