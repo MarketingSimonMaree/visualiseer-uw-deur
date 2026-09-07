@@ -64,7 +64,7 @@ function applyTemplate(template: string, vars: TemplateVars): string {
 function visualiseerUrl(): string {
   return (
     process.env.VISUALISEER_URL?.trim() ||
-    'https://www.simonmaree.nl/visualiseer-uw-deur/'
+    'https://visualiseer.simonmaree.nl/'
   )
 }
 

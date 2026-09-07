@@ -30,7 +30,7 @@ export function productMontagetypes(product: Product): Montagetype[] {
 
 /**
  * Publieke deeplink voor een product (voor website-knoppen / beheer).
- * Voorbeeld: https://www.simonmaree.nl/visualiseer-uw-deur/?product=aluminium-voordeur-x
+ * Voorbeeld: https://visualiseer.simonmaree.nl/?product=wk1382-2
  */
 export function buildVisualiseerProductUrl(
   productId: string,

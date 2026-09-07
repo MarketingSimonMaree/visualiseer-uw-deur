@@ -242,7 +242,7 @@ export async function processMailResultaat(
     bron: body.bron,
     visualiseerUrl:
       process.env.VISUALISEER_URL?.trim() ||
-      'https://www.simonmaree.nl/visualiseer-uw-deur/',
+      'https://visualiseer.simonmaree.nl/',
   }
 
   const resultAttachment: MailAttachment = {
