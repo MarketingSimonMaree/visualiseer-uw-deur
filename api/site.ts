@@ -1,12 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createHmac, timingSafeEqual } from 'crypto'
-import {
-  fetchStatsOverview,
-  isAllowedEventType,
-  trackAnalyticsEvent,
-  type StatsRangeDays,
-} from '../shared/analyticsCore'
 
 export const config = { maxDuration: 30 }
 
@@ -131,7 +125,7 @@ function mapFilter(row: {
   }
 }
 
-async function ensure(sql: {
+async function ensureContentTables(sql: {
   (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>
 }) {
   await sql`
@@ -158,38 +152,55 @@ async function ensure(sql: {
     )
   `
   await sql`ALTER TABLE catalogus_filters ADD COLUMN IF NOT EXISTS montagetype TEXT NOT NULL DEFAULT ''`
-  await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
-  await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS deur_groep TEXT NOT NULL DEFAULT 'binnen'`
-  await sql`
-    UPDATE montagetype_defs
-    SET never_lever_handle = true
-    WHERE id IN ('voordeur', 'voordeur-met-kozijn')
-  `
-  await sql`
-    UPDATE montagetype_defs
-    SET deur_groep = 'buiten'
-    WHERE id IN ('voordeur', 'voordeur-met-kozijn', 'tuindeur', 'tuindeur-met-kozijn')
-  `
-  await sql`
-    INSERT INTO montagetype_defs (
-      id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep, updated_at
-    ) VALUES
-      (
-        'tuindeur',
-        'Nieuwe tuindeur in bestaand kozijn',
-        'Achterdeur / tuindeur in uw bestaande kozijn',
-        'Replace only the garden/back door leaf (tuindeur/achterdeur) in the existing exterior frame. Keep the existing frame unchanged. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
-        70, true, false, 'buiten', now()
-      ),
-      (
-        'tuindeur-met-kozijn',
-        'Nieuwe tuindeur mét nieuw kozijn',
-        'Achterdeur / tuindeur inclusief nieuw kozijn',
-        'Replace the garden/back door (tuindeur/achterdeur) including a new exterior frame that fits the opening. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
-        80, true, false, 'buiten', now()
-      )
-    ON CONFLICT (id) DO NOTHING
-  `
+}
+
+/** Montage-migraties: best-effort, mag teksten/filters nooit laten crashen. */
+async function ensureMontageExtras(sql: {
+  (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>
+}) {
+  try {
+    await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS never_lever_handle BOOLEAN NOT NULL DEFAULT false`
+    await sql`ALTER TABLE montagetype_defs ADD COLUMN IF NOT EXISTS deur_groep TEXT NOT NULL DEFAULT 'binnen'`
+    await sql`
+      UPDATE montagetype_defs
+      SET never_lever_handle = true
+      WHERE id IN ('voordeur', 'voordeur-met-kozijn')
+    `
+    await sql`
+      UPDATE montagetype_defs
+      SET deur_groep = 'buiten'
+      WHERE id IN ('voordeur', 'voordeur-met-kozijn', 'tuindeur', 'tuindeur-met-kozijn')
+    `
+    await sql`
+      INSERT INTO montagetype_defs (
+        id, label, hint, agent_prompt, sort_order, actief, never_lever_handle, deur_groep, updated_at
+      ) VALUES
+        (
+          'tuindeur',
+          'Nieuwe tuindeur in bestaand kozijn',
+          'Achterdeur / tuindeur in uw bestaande kozijn',
+          'Replace only the garden/back door leaf (tuindeur/achterdeur) in the existing exterior frame. Keep the existing frame unchanged. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+          70, true, false, 'buiten', now()
+        ),
+        (
+          'tuindeur-met-kozijn',
+          'Nieuwe tuindeur mét nieuw kozijn',
+          'Achterdeur / tuindeur inclusief nieuw kozijn',
+          'Replace the garden/back door (tuindeur/achterdeur) including a new exterior frame that fits the opening. A lever handle (deurkruk/klink) is allowed for garden doors when appropriate.',
+          80, true, false, 'buiten', now()
+        )
+      ON CONFLICT (id) DO NOTHING
+    `
+  } catch (err) {
+    console.error('[api/site] montage extras skipped', err)
+  }
+}
+
+async function ensure(sql: {
+  (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>
+}) {
+  await ensureContentTables(sql)
+  await ensureMontageExtras(sql)
 }
 
 function resourceOf(req: VercelRequest): string {
@@ -308,69 +319,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(204).end()
       return
     }
-    if (req.method === 'GET') {
-      if (!requireAuth(req)) {
-        res.status(401).json({ error: 'Niet ingelogd' })
-        return
-      }
-      try {
+    try {
+      const {
+        fetchStatsOverview,
+        isAllowedEventType,
+        trackAnalyticsEvent,
+      } = await import('../shared/analyticsCore')
+
+      if (req.method === 'GET') {
+        if (!requireAuth(req)) {
+          res.status(401).json({ error: 'Niet ingelogd' })
+          return
+        }
         const daysRaw = Number(req.query.days)
-        const days = (
-          daysRaw === 7 || daysRaw === 90 ? daysRaw : 30
-        ) as StatsRangeDays
+        const days = daysRaw === 7 || daysRaw === 90 ? daysRaw : 30
         const overview = await fetchStatsOverview(days)
         res.status(200).json(overview)
-      } catch (err) {
-        console.error('[api/site analytics]', err)
-        res.status(500).json({
-          error: err instanceof Error ? err.message : 'Statistieken mislukt',
-        })
-      }
-      return
-    }
-    if (req.method === 'POST') {
-      const body = (req.body ?? {}) as {
-        eventType?: string
-        productId?: string
-        productNaam?: string
-        montagetype?: string
-        kleur?: string
-        beslagKleur?: string
-        bron?: string
-        prijsindicatie?: boolean
-        fromCache?: boolean
-        isRetry?: boolean
-        isMock?: boolean
-        errorMessage?: string
-        sessionId?: string
-        meta?: Record<string, unknown>
-      }
-      const eventType = String(body.eventType ?? '').trim()
-      if (!isAllowedEventType(eventType)) {
-        res.status(400).json({ error: 'Ongeldig eventType' })
         return
       }
-      void trackAnalyticsEvent({
-        eventType,
-        productId: body.productId,
-        productNaam: body.productNaam,
-        montagetype: body.montagetype,
-        kleur: body.kleur,
-        beslagKleur: body.beslagKleur,
-        bron: body.bron,
-        prijsindicatie: body.prijsindicatie,
-        fromCache: body.fromCache,
-        isRetry: body.isRetry,
-        isMock: body.isMock,
-        errorMessage: body.errorMessage,
-        sessionId: body.sessionId,
-        ip: clientIp(req),
-        meta: body.meta,
+      if (req.method === 'POST') {
+        const body = (req.body ?? {}) as {
+          eventType?: string
+          productId?: string
+          productNaam?: string
+          montagetype?: string
+          kleur?: string
+          beslagKleur?: string
+          bron?: string
+          prijsindicatie?: boolean
+          fromCache?: boolean
+          isRetry?: boolean
+          isMock?: boolean
+          errorMessage?: string
+          sessionId?: string
+          meta?: Record<string, unknown>
+        }
+        const eventType = String(body.eventType ?? '').trim()
+        if (!isAllowedEventType(eventType)) {
+          res.status(400).json({ error: 'Ongeldig eventType' })
+          return
+        }
+        void trackAnalyticsEvent({
+          eventType,
+          productId: body.productId,
+          productNaam: body.productNaam,
+          montagetype: body.montagetype,
+          kleur: body.kleur,
+          beslagKleur: body.beslagKleur,
+          bron: body.bron,
+          prijsindicatie: body.prijsindicatie,
+          fromCache: body.fromCache,
+          isRetry: body.isRetry,
+          isMock: body.isMock,
+          errorMessage: body.errorMessage,
+          sessionId: body.sessionId,
+          ip: clientIp(req),
+          meta: body.meta,
+        })
+        res.status(204).end()
+        return
+      }
+      res.status(405).json({ error: 'Method not allowed' })
+    } catch (err) {
+      console.error('[api/site analytics]', err)
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Statistieken mislukt',
       })
-      res.status(204).end()
-      return
     }
-    res.status(405).json({ error: 'Method not allowed' })
     return
   }
 
@@ -386,7 +401,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = neon(databaseUrl)
 
   try {
-    await ensure(sql)
+    // Teksten/filters: alleen hun eigen tabellen — geen zware montage-migraties
+    if (resource === 'teksten' || resource === 'filters') {
+      await ensureContentTables(sql)
+    } else {
+      await ensure(sql)
+    }
 
     if (resource === 'teksten') {
       if (req.method === 'GET') {

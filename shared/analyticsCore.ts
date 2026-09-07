@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash } from 'crypto'
 import { neon } from '@neondatabase/serverless'
 
 export const ANALYTICS_EVENT_TYPES = [
