@@ -3,7 +3,7 @@ export type Montagetype = string
 
 export type Materiaal = 'hout' | 'staal' | 'aluminium'
 
-export type KleurCategorie = 'ral' | 'eiken'
+export type KleurCategorie = 'ral' | 'eiken' | 'hout'
 
 export interface KleurOptie {
   id: string

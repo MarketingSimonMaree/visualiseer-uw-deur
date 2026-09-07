@@ -244,7 +244,8 @@ export default function AdminApp() {
     [kleuren],
   )
   const eikenKleuren = useMemo(
-    () => kleuren.filter((k) => k.categorie === 'eiken'),
+    () =>
+      kleuren.filter((k) => /eiken|hout/i.test(String(k.categorie))),
     [kleuren],
   )
 
@@ -849,7 +850,7 @@ export default function AdminApp() {
                   <span className="gold">Kleuren</span>
                 </h1>
                 <p className="mt-1 text-[var(--colorDarkGray)]">
-                  RAL vs eiken, met optioneel staaltje (afbeelding-URL).
+                  RAL vs houtkleuren (eiken, merbau, …), met optioneel staaltje.
                 </p>
               </div>
               <button
@@ -881,7 +882,7 @@ export default function AdminApp() {
               }}
             />
             <KleurSectie
-              title="Eiken / houtkleuren"
+              title="Houtkleuren"
               items={eikenKleuren}
               onEdit={(k) => {
                 setIsNewKleur(false)
@@ -1825,7 +1826,8 @@ export default function AdminApp() {
                 }
               >
                 <option value="ral">RAL</option>
-                <option value="eiken">Eiken</option>
+                <option value="hout">Hout (eiken, merbau, …)</option>
+                <option value="eiken">Eiken (legacy)</option>
               </select>
             </Field>
             <Field label="Hex (fallback-swatch)">

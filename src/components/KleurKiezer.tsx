@@ -19,12 +19,16 @@ function normalizeKleuren(product: Product): KleurOptie[] {
       ? {
           id: k,
           naam: k,
-          categorie: /eiken|hout/i.test(k) ? 'eiken' : 'ral',
+          categorie: /eiken|hout|merbau|teak|oak/i.test(k) ? 'hout' : 'ral',
           hex: null,
           staaltjeUrl: null,
         }
       : k,
   )
+}
+
+function isHoutKleur(k: KleurOptie) {
+  return /eiken|hout/i.test(String(k.categorie))
 }
 
 export function KleurKiezer({
@@ -39,8 +43,8 @@ export function KleurKiezer({
   remaining,
 }: Props) {
   const kleuren = normalizeKleuren(product)
-  const ral = kleuren.filter((k) => k.categorie !== 'eiken')
-  const eiken = kleuren.filter((k) => k.categorie === 'eiken')
+  const ral = kleuren.filter((k) => !isHoutKleur(k))
+  const hout = kleuren.filter((k) => isHoutKleur(k))
 
   return (
     <section className="page">
@@ -79,10 +83,10 @@ export function KleurKiezer({
           onChange={onChange}
         />
       )}
-      {eiken.length > 0 && (
+      {hout.length > 0 && (
         <KleurGrid
-          title="Eiken / houtkleuren"
-          items={eiken}
+          title="Houtkleuren"
+          items={hout}
           value={value}
           onChange={onChange}
         />

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { DeurGroep, Montagetype, MontagetypeDef } from '../types/product'
 import { FALLBACK_MONTAGETYPES, inferDeurGroep } from '../types/product'
 
@@ -32,10 +32,23 @@ export function MontagetypeKiezer({
     [options],
   )
 
-  const initialGroep: DeurGroep | null = value
-    ? (types.find((t) => t.id === value)?.deurGroep ?? inferDeurGroep(value))
-    : null
+  /** Als alle beschikbare opties dezelfde groep hebben (bijv. alleen voordeuren), sla binnen/buiten over. */
+  const onlyGroep = useMemo((): DeurGroep | null => {
+    const groepen = new Set(types.map((t) => t.deurGroep))
+    if (groepen.size === 1) return [...groepen][0]!
+    return null
+  }, [types])
+
+  const initialGroep: DeurGroep | null =
+    onlyGroep ??
+    (value
+      ? (types.find((t) => t.id === value)?.deurGroep ?? inferDeurGroep(value))
+      : null)
   const [groep, setGroep] = useState<DeurGroep | null>(initialGroep)
+
+  useEffect(() => {
+    if (onlyGroep && groep !== onlyGroep) setGroep(onlyGroep)
+  }, [onlyGroep, groep])
 
   const inGroep = useMemo(
     () => (groep ? types.filter((t) => t.deurGroep === groep) : []),
@@ -53,7 +66,8 @@ export function MontagetypeKiezer({
   }
 
   function handleBack() {
-    if (groep) {
+    // Bij vast product (alleen buiten of alleen binnen) geen groepskeuze tonen
+    if (groep && !onlyGroep) {
       setGroep(null)
       onChange(null)
       return
@@ -151,7 +165,7 @@ export function MontagetypeKiezer({
               disabled={!value || !inGroep.some((t) => t.id === value)}
               onClick={onContinue}
             >
-              Kies een deur
+              {onlyGroep ? 'Verder' : 'Kies een deur'}
               <span className="btn-arrow" aria-hidden>
                 →
               </span>
