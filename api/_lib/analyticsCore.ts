@@ -2,6 +2,8 @@ import { createHash } from 'crypto'
 import { neon } from '@neondatabase/serverless'
 
 export const ANALYTICS_EVENT_TYPES = [
+  'session_start',
+  'page_view',
   'foto_uploaded',
   'montagetype_selected',
   'product_selected',
@@ -46,6 +48,7 @@ export type StatsOverview = {
   range: { days: number; from: string; to: string }
   kpis: {
     sessions: number
+    pageViews: number
     fotoUploads: number
     visualisaties: number
     cacheHits: number
@@ -209,6 +212,7 @@ export async function fetchStatsOverview(
     range: { days: safeDays, from: isoDay(from), to: isoDay(to) },
     kpis: {
       sessions: 0,
+      pageViews: 0,
       fotoUploads: 0,
       visualisaties: 0,
       cacheHits: 0,
@@ -220,6 +224,8 @@ export async function fetchStatsOverview(
     },
     daily: emptyDaily(safeDays, to),
     funnel: [
+      { step: 'session_start', label: 'Sessie gestart', count: 0 },
+      { step: 'page_view', label: 'Pagina bekeken', count: 0 },
       { step: 'foto_uploaded', label: 'Foto geüpload', count: 0 },
       { step: 'montagetype_selected', label: 'Montagetype', count: 0 },
       { step: 'product_selected', label: 'Product gekozen', count: 0 },
@@ -252,7 +258,11 @@ export async function fetchStatsOverview(
   ] = await Promise.all([
     sql`
       SELECT
-        COUNT(DISTINCT session_id) FILTER (WHERE session_id IS NOT NULL) AS sessions,
+        COALESCE(
+          NULLIF(COUNT(*) FILTER (WHERE event_type = 'session_start'), 0),
+          COUNT(DISTINCT session_id) FILTER (WHERE session_id IS NOT NULL)
+        ) AS sessions,
+        COUNT(*) FILTER (WHERE event_type = 'page_view') AS page_views,
         COUNT(*) FILTER (WHERE event_type = 'foto_uploaded') AS foto_uploads,
         COUNT(*) FILTER (
           WHERE event_type IN ('generate_success', 'generate_cache_hit')
@@ -287,6 +297,8 @@ export async function fetchStatsOverview(
       FROM analytics_events
       WHERE created_at >= ${fromIso}
         AND event_type IN (
+          'session_start',
+          'page_view',
           'foto_uploaded',
           'montagetype_selected',
           'product_selected',
@@ -352,6 +364,7 @@ export async function fetchStatsOverview(
   const kpi = (
     kpiRows as Array<{
       sessions: string | number | null
+      page_views: string | number | null
       foto_uploads: string | number | null
       visualisaties: string | number | null
       cache_hits: string | number | null
@@ -412,6 +425,7 @@ export async function fetchStatsOverview(
     range: { days: safeDays, from: isoDay(from), to: isoDay(to) },
     kpis: {
       sessions: n(kpi?.sessions),
+      pageViews: n(kpi?.page_views),
       fotoUploads: n(kpi?.foto_uploads),
       visualisaties,
       cacheHits: n(kpi?.cache_hits),
@@ -423,6 +437,16 @@ export async function fetchStatsOverview(
     },
     daily,
     funnel: [
+      {
+        step: 'session_start',
+        label: 'Sessie gestart',
+        count: funnelCounts.get('session_start') ?? 0,
+      },
+      {
+        step: 'page_view',
+        label: 'Pagina bekeken',
+        count: funnelCounts.get('page_view') ?? 0,
+      },
       {
         step: 'foto_uploaded',
         label: 'Foto geüpload',

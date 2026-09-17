@@ -24,10 +24,11 @@ import { buildCacheKey } from './lib/hash'
 import { requestGeneration } from './lib/generate'
 import { requestMailResultaat } from './lib/mailResultaat'
 import { watermarkImageToBase64 } from './lib/download'
-import { trackEvent, getAnalyticsSessionId } from './lib/analytics'
+import { trackEvent, trackAppVisit, getAnalyticsSessionId } from './lib/analytics'
 import { fetchProducten } from './lib/productenApi'
 import {
   fetchSiteContent,
+  readCachedSiteContent,
   type PublicCatalogusFilter,
 } from './lib/contentApi'
 import type { SituatieTekst } from './lib/adminApi'
@@ -126,28 +127,27 @@ export default function App() {
   const [remaining, setRemaining] = useState(() => remainingGenerations())
   const [producten, setProducten] = useState<Product[]>([])
   const [productenError, setProductenError] = useState<string | null>(null)
+  const cachedContent = useMemo(() => readCachedSiteContent(), [])
   const [catalogusFilters, setCatalogusFilters] = useState<
     PublicCatalogusFilter[]
-  >([])
+  >(() => cachedContent?.filters ?? [])
   const [montagetypeOpties, setMontagetypeOpties] = useState<MontagetypeDef[]>(
-    [],
+    () =>
+      (cachedContent?.montagetypes ?? []).map((m) => ({
+        ...m,
+        agentPrompt: '',
+        deurGroep: m.deurGroep === 'buiten' ? 'buiten' : 'binnen',
+      })),
   )
-  const [situatieTekst, setSituatieTekst] = useState<SituatieTekst>({
-    titelGold: 'Huidige',
-    titel: 'situatie',
-    lead:
-      'Upload een foto van de deuropening zoals die nu is. Zo ziet u straks precies hoe de nieuwe deur past.',
-    tips: [
-      'Houd de deur recht en in het midden',
-      'Breng de volledige deur en het kozijn in beeld',
-      'Zorg voor voldoende ruimte rondom',
-    ],
-    tipsExtraTitel: 'Let daarnaast op:',
-    tipsExtra: [
-      'Zorg dat de deur gesloten is',
-      'Maak de foto bij voldoende licht en zonder obstakels',
-    ],
-  })
+  const [situatieTekst, setSituatieTekst] = useState<SituatieTekst | null>(
+    () => cachedContent?.situatie ?? null,
+  )
+  const [contentReady, setContentReady] = useState(() => Boolean(cachedContent))
+  const [productenReady, setProductenReady] = useState(false)
+  const deepLinkProductId = useMemo(() => parseDeepLink().productId, [])
+  /** Wacht op producten bij deeplink, zodat model-banner niet later inschiet. */
+  const bootReady =
+    contentReady && (!deepLinkProductId || productenReady)
 
   const actieveMontageOpties = useMemo(() => {
     const base = montagetypeOpties.filter((m) => {
@@ -169,20 +169,34 @@ export default function App() {
   useEffect(() => {
     let cancelled = false
     const link = parseDeepLink()
-    void Promise.all([fetchProducten(), fetchSiteContent()])
-      .then(([lijst, content]) => {
+
+    trackAppVisit({
+      path: window.location.pathname + window.location.search,
+      productId: link.productId ?? undefined,
+      montageId: link.montageId ?? undefined,
+      bron: link.productId ? 'deeplink' : 'direct',
+    })
+
+    // Content en producten parallel, onafhankelijk — tekst wacht niet op catalogus.
+    void fetchSiteContent().then((content) => {
+      if (cancelled) return
+      setSituatieTekst(content.situatie)
+      setCatalogusFilters(content.filters)
+      setMontagetypeOpties(
+        content.montagetypes.map((m) => ({
+          ...m,
+          agentPrompt: '',
+          deurGroep: m.deurGroep === 'buiten' ? 'buiten' : 'binnen',
+        })),
+      )
+      setContentReady(true)
+    })
+
+    void fetchProducten()
+      .then((lijst) => {
         if (cancelled) return
         setProducten(lijst)
         setProductenError(null)
-        setSituatieTekst(content.situatie)
-        setCatalogusFilters(content.filters)
-        setMontagetypeOpties(
-          content.montagetypes.map((m) => ({
-            ...m,
-            agentPrompt: '',
-            deurGroep: m.deurGroep === 'buiten' ? 'buiten' : 'binnen',
-          })),
-        )
 
         if (link.productId) {
           const found = lijst.find(
@@ -211,6 +225,7 @@ export default function App() {
             )
           }
         }
+        setProductenReady(true)
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -218,8 +233,10 @@ export default function App() {
           setProductenError(
             err instanceof Error ? err.message : 'Producten laden mislukt',
           )
+          setProductenReady(true)
         }
       })
+
     return () => {
       cancelled = true
     }
@@ -567,7 +584,7 @@ export default function App() {
       </header>
 
       <main className="flex min-h-0 flex-1 flex-col">
-        {deepLinkError && step === 'situatie' && (
+        {deepLinkError && step === 'situatie' && bootReady && (
           <div className="mx-auto w-full max-w-3xl px-4 pt-4 sm:px-6">
             <p className="note-banner text-sm" role="status">
               {deepLinkError} U kunt gewoon een deur kiezen in de catalogus.
@@ -575,7 +592,19 @@ export default function App() {
           </div>
         )}
 
-        {step === 'situatie' && (
+        {step === 'situatie' && !bootReady && (
+          <section className="page" aria-busy="true" aria-live="polite">
+            <p className="lead text-[var(--colorDarkGray)]">Even laden…</p>
+            <div className="mt-6 space-y-3">
+              <div className="h-10 max-w-md animate-pulse rounded bg-[var(--colorGray)]" />
+              <div className="h-4 max-w-xl animate-pulse rounded bg-[var(--colorGray)]" />
+              <div className="h-4 max-w-lg animate-pulse rounded bg-[var(--colorGray)]" />
+              <div className="mt-8 aspect-[4/3] max-w-md animate-pulse rounded-[var(--borderRadius)] bg-[var(--colorGray)]" />
+            </div>
+          </section>
+        )}
+
+        {step === 'situatie' && bootReady && situatieTekst && (
           <FotoUpload
             foto={foto}
             teksten={situatieTekst}

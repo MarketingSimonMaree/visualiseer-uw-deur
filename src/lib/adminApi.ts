@@ -358,6 +358,7 @@ export type AdminStatsOverview = {
   range: { days: number; from: string; to: string }
   kpis: {
     sessions: number
+    pageViews: number
     fotoUploads: number
     visualisaties: number
     cacheHits: number

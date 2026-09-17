@@ -231,7 +231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     try {
       const sql = neon(databaseUrl)
-      await ensure(sql)
+      // Geen ensure()/DDL op het publieke pad — tabellen bestaan al via beheer.
       const [tekstRows, filterRows, montageRows] = await Promise.all([
         sql`SELECT payload FROM site_teksten WHERE id = 'situatie' LIMIT 1`,
         sql`
@@ -297,10 +297,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               : inferred,
         }
       })
-      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120')
+      // Korte CDN-cache; geen lange stale-while-revalidate (voorkomt “oude tekst”).
+      res.setHeader('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=15')
       res.status(200).json({ situatie, filters, montagetypes })
     } catch (err) {
       console.error('[api/site content]', err)
+      res.setHeader('Cache-Control', 'no-store')
       res.status(200).json({ situatie: DEFAULT_SITUATIE, filters: [], montagetypes: [] })
     }
     return
@@ -353,6 +355,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             payload = EXCLUDED.payload,
             updated_at = now()
         `
+        res.setHeader('Cache-Control', 'no-store')
         res.status(200).json({ situatie: next })
         return
       }

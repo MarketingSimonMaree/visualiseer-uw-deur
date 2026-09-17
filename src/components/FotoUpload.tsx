@@ -225,6 +225,10 @@ export function FotoUpload({
                   ? 'Uw geüploade deuropening'
                   : 'Voorbeeld: deur recht in het midden, volledig kozijn in beeld'
               }
+              width={800}
+              height={600}
+              decoding="async"
+              fetchPriority={foto ? 'high' : 'low'}
             />
           </div>
           <div className="upload-panel-footer">

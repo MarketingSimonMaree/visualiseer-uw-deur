@@ -8,10 +8,29 @@
     <title>Deurvisualisator — Simon Maree</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Non-blocking fonts: eerst systeemfont, daarna Playfair/Poppins -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=Poppins:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=Poppins:wght@400;500;600;700&display=optional"
+      onload="this.onload=null;this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=Poppins:wght@400;500;600;700&display=optional"
+      />
+    </noscript>
+    <style>
+      html, body { margin: 0; background: #f7f5f2; }
+      #root:empty::after {
+        content: 'Even laden…';
+        display: block;
+        padding: 2.5rem 1.25rem;
+        font-family: system-ui, sans-serif;
+        color: #6b6b6b;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

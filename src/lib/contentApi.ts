@@ -35,29 +35,48 @@ const FALLBACK_SITUATIE: SituatieTekst = {
   ],
 }
 
+const CONTENT_CACHE_KEY = 'sm-viz-site-content-v1'
+
+function normalizeContent(data: Partial<SiteContent> | null | undefined): SiteContent {
+  return {
+    situatie: data?.situatie ?? FALLBACK_SITUATIE,
+    filters: Array.isArray(data?.filters) ? data.filters : [],
+    montagetypes: Array.isArray(data?.montagetypes)
+      ? data.montagetypes
+      : FALLBACK_MONTAGETYPES,
+  }
+}
+
+/** Laatste bekende CMS-content voor snelle first paint (geen FOOC). */
+export function readCachedSiteContent(): SiteContent | null {
+  try {
+    const raw = sessionStorage.getItem(CONTENT_CACHE_KEY)
+    if (!raw) return null
+    return normalizeContent(JSON.parse(raw) as Partial<SiteContent>)
+  } catch {
+    return null
+  }
+}
+
+function writeCachedSiteContent(content: SiteContent) {
+  try {
+    sessionStorage.setItem(CONTENT_CACHE_KEY, JSON.stringify(content))
+  } catch {
+    // negeer quota / private mode
+  }
+}
+
 export async function fetchSiteContent(): Promise<SiteContent> {
   try {
     const res = await fetch('/api/site?resource=content')
     if (!res.ok) {
-      return {
-        situatie: FALLBACK_SITUATIE,
-        filters: [],
-        montagetypes: FALLBACK_MONTAGETYPES,
-      }
+      return readCachedSiteContent() ?? normalizeContent(null)
     }
     const data = (await res.json()) as Partial<SiteContent>
-    return {
-      situatie: data.situatie ?? FALLBACK_SITUATIE,
-      filters: Array.isArray(data.filters) ? data.filters : [],
-      montagetypes: Array.isArray(data.montagetypes)
-        ? data.montagetypes
-        : FALLBACK_MONTAGETYPES,
-    }
+    const content = normalizeContent(data)
+    writeCachedSiteContent(content)
+    return content
   } catch {
-    return {
-      situatie: FALLBACK_SITUATIE,
-      filters: [],
-      montagetypes: FALLBACK_MONTAGETYPES,
-    }
+    return readCachedSiteContent() ?? normalizeContent(null)
   }
 }

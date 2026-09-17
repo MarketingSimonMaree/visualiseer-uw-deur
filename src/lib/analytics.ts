@@ -1,4 +1,6 @@
 export type AnalyticsEventType =
+  | 'session_start'
+  | 'page_view'
   | 'foto_uploaded'
   | 'montagetype_selected'
   | 'product_selected'
@@ -17,6 +19,10 @@ export type AnalyticsEventType =
   | 'result_downloaded'
 
 const SESSION_KEY = 'sm-viz-analytics-session'
+const SESSION_STARTED_KEY = 'sm-viz-analytics-session-started'
+
+/** Voorkomt dubbele page_view bij React StrictMode (dev). */
+let pageViewTrackedThisLoad = false
 
 export function getAnalyticsSessionId(): string {
   try {
@@ -67,6 +73,36 @@ export function trackEvent(payload: TrackPayload): void {
       body,
       keepalive: true,
     }).catch(() => {})
+  } catch {
+    // negeer
+  }
+}
+
+/**
+ * Bij openen van de visualisator:
+ * - session_start: één keer per browsertab (sessionStorage)
+ * - page_view: één keer per page load (refresh telt opnieuw)
+ */
+export function trackAppVisit(meta?: Record<string, unknown>): void {
+  try {
+    getAnalyticsSessionId()
+    let isNewSession = false
+    try {
+      if (!sessionStorage.getItem(SESSION_STARTED_KEY)) {
+        sessionStorage.setItem(SESSION_STARTED_KEY, '1')
+        isNewSession = true
+      }
+    } catch {
+      isNewSession = true
+    }
+
+    if (isNewSession) {
+      trackEvent({ eventType: 'session_start', meta })
+    }
+
+    if (pageViewTrackedThisLoad) return
+    pageViewTrackedThisLoad = true
+    trackEvent({ eventType: 'page_view', meta })
   } catch {
     // negeer
   }

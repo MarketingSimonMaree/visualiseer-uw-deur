@@ -161,7 +161,12 @@ export function AdminStatsTab() {
             <KpiCard
               label="Sessies"
               value={data.kpis.sessions}
-              hint="Unieke bezoekerssessies"
+              hint="Tab-sessies (session_start)"
+            />
+            <KpiCard
+              label="Pageviews"
+              value={data.kpis.pageViews ?? 0}
+              hint="Inclusief refreshes"
             />
             <KpiCard
               label="Foto’s geüpload"

@@ -139,6 +139,8 @@ async function sendWithMailjet(opts: {
   subject: string
   html: string
   attachments: MailAttachment[]
+  /** Bij "Beantwoorden" in de mailbox: dit adres (bijv. de aanvrager). */
+  replyTo?: { email: string; name?: string }
 }): Promise<boolean> {
   const apiKey = process.env.MAILJET_API_KEY?.trim()
   const apiSecret = process.env.MAILJET_API_SECRET?.trim()
@@ -151,6 +153,25 @@ async function sendWithMailjet(opts: {
     .trim()
     .replace(/^["']|["']$/g, '')
 
+  const message: Record<string, unknown> = {
+    From: { Email: fromEmail, Name: fromName },
+    To: [{ Email: opts.to }],
+    Subject: opts.subject,
+    HTMLPart: opts.html,
+    Attachments: opts.attachments.map((a) => ({
+      ContentType: a.mimeType,
+      Filename: a.filename,
+      Base64Content: a.base64,
+    })),
+  }
+
+  if (opts.replyTo?.email) {
+    message.ReplyTo = {
+      Email: opts.replyTo.email,
+      ...(opts.replyTo.name ? { Name: opts.replyTo.name } : {}),
+    }
+  }
+
   const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64')
   const res = await fetch('https://api.mailjet.com/v3.1/send', {
     method: 'POST',
@@ -159,19 +180,7 @@ async function sendWithMailjet(opts: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      Messages: [
-        {
-          From: { Email: fromEmail, Name: fromName },
-          To: [{ Email: opts.to }],
-          Subject: opts.subject,
-          HTMLPart: opts.html,
-          Attachments: opts.attachments.map((a) => ({
-            ContentType: a.mimeType,
-            Filename: a.filename,
-            Base64Content: a.base64,
-          })),
-        },
-      ],
+      Messages: [message],
     }),
   })
 
@@ -277,11 +286,13 @@ export async function processMailResultaat(
     const leadsTpl = pickTemplate(templates, 'leads')
     const attachments = [resultAttachment]
     if (roomAttachment) attachments.push(roomAttachment)
+    // Reply-To = aanvrager, zodat "Beantwoorden" in info@ naar de klant gaat.
     leadsEmailed = await sendWithMailjet({
       to: leadsEmail,
       subject: applyMailTemplate(leadsTpl.subject, vars),
       html: applyMailTemplate(leadsTpl.html, vars),
       attachments,
+      replyTo: { email, name: naam },
     })
   }
   // Geen PII in de database — alleen mails verstuurd.
