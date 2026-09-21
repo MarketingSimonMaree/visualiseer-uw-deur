@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { normalizeKleurCategorie } from '../shared/kleurCategorie'
 
 export const config = { maxDuration: 30 }
 
@@ -104,12 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(400).json({ error: 'id en naam zijn verplicht' })
         return
       }
-      const categorie =
-        body.categorie === 'eiken' || body.categorie === 'ral'
-          ? body.categorie
-          : /eiken|hout/i.test(body.naam)
-            ? 'eiken'
-            : 'ral'
+      const categorie = normalizeKleurCategorie(body.categorie)
 
       if (req.method === 'POST') {
         await sql`

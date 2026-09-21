@@ -3,12 +3,13 @@ export type Montagetype = string
 
 export type Materiaal = 'hout' | 'staal' | 'aluminium'
 
-export type KleurCategorie = 'ral' | 'eiken' | 'hout'
+/** Vrij te kiezen in beheer (slug), bijv. ral, hout, specials. */
+export type KleurCategorie = string
 
 export interface KleurOptie {
   id: string
   naam: string
-  categorie: KleurCategorie | string
+  categorie: KleurCategorie
   hex?: string | null
   staaltjeUrl?: string | null
 }

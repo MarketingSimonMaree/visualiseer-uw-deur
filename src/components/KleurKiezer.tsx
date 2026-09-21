@@ -1,5 +1,10 @@
 import type { KleurOptie, Product } from '../types/product'
 import { BESLAG_KLEUREN } from '../data/beslagKleuren'
+import {
+  compareKleurCategorie,
+  kleurCategorieLabel,
+  normalizeKleurCategorie,
+} from '../../shared/kleurCategorie'
 
 interface Props {
   product: Product
@@ -23,12 +28,11 @@ function normalizeKleuren(product: Product): KleurOptie[] {
           hex: null,
           staaltjeUrl: null,
         }
-      : k,
+      : {
+          ...k,
+          categorie: normalizeKleurCategorie(k.categorie),
+        },
   )
-}
-
-function isHoutKleur(k: KleurOptie) {
-  return /eiken|hout/i.test(String(k.categorie))
 }
 
 export function KleurKiezer({
@@ -43,8 +47,16 @@ export function KleurKiezer({
   remaining,
 }: Props) {
   const kleuren = normalizeKleuren(product)
-  const ral = kleuren.filter((k) => !isHoutKleur(k))
-  const hout = kleuren.filter((k) => isHoutKleur(k))
+  const groepen = (() => {
+    const map = new Map<string, KleurOptie[]>()
+    for (const k of kleuren) {
+      const cat = normalizeKleurCategorie(k.categorie)
+      const list = map.get(cat)
+      if (list) list.push(k)
+      else map.set(cat, [k])
+    }
+    return [...map.entries()].sort(([a], [b]) => compareKleurCategorie(a, b))
+  })()
 
   return (
     <section className="page">
@@ -75,22 +87,15 @@ export function KleurKiezer({
         controleren dit bij uw aanvraag.
       </div>
 
-      {ral.length > 0 && (
+      {groepen.map(([cat, items]) => (
         <KleurGrid
-          title="RAL-kleuren"
-          items={ral}
+          key={cat}
+          title={kleurCategorieLabel(cat)}
+          items={items}
           value={value}
           onChange={onChange}
         />
-      )}
-      {hout.length > 0 && (
-        <KleurGrid
-          title="Houtkleuren"
-          items={hout}
-          value={value}
-          onChange={onChange}
-        />
-      )}
+      ))}
 
       <div className="mt-10 border-t border-[var(--colorBorder)] pt-8">
         <h2 className="section-title text-2xl sm:text-3xl">

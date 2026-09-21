@@ -37,6 +37,11 @@ import { AdminStatsTab } from './components/AdminStatsTab'
 import { AdminTekstenTab } from './components/AdminTekstenTab'
 import { buildVisualiseerProductUrl } from './lib/deepLink'
 import {
+  compareKleurCategorie,
+  kleurCategorieLabel,
+  normalizeKleurCategorie,
+} from '../shared/kleurCategorie'
+import {
   MONTAGETYPE_LABELS,
   type Materiaal,
   type Montagetype,
@@ -239,15 +244,24 @@ export default function AdminApp() {
     })
   }, [producten, query, filter])
 
-  const ralKleuren = useMemo(
-    () => kleuren.filter((k) => k.categorie === 'ral'),
-    [kleuren],
-  )
-  const eikenKleuren = useMemo(
-    () =>
-      kleuren.filter((k) => /eiken|hout/i.test(String(k.categorie))),
-    [kleuren],
-  )
+  const kleurCategorieen = useMemo(() => {
+    const set = new Set<string>(['ral', 'hout'])
+    for (const k of kleuren) {
+      set.add(normalizeKleurCategorie(k.categorie))
+    }
+    return [...set].sort(compareKleurCategorie)
+  }, [kleuren])
+
+  const kleurenPerCategorie = useMemo(() => {
+    const map = new Map<string, AdminKleur[]>()
+    for (const k of kleuren) {
+      const cat = normalizeKleurCategorie(k.categorie)
+      const list = map.get(cat)
+      if (list) list.push(k)
+      else map.set(cat, [k])
+    }
+    return [...map.entries()].sort(([a], [b]) => compareKleurCategorie(a, b))
+  }, [kleuren])
 
   async function onLogin(e: FormEvent) {
     e.preventDefault()
@@ -850,7 +864,8 @@ export default function AdminApp() {
                   <span className="gold">Kleuren</span>
                 </h1>
                 <p className="mt-1 text-[var(--colorDarkGray)]">
-                  RAL vs houtkleuren (eiken, merbau, …), met optioneel staaltje.
+                  Groepeer kleuren in categorieën (RAL, hout, of een eigen
+                  categorie). Optioneel met staaltje.
                 </p>
               </div>
               <button
@@ -873,22 +888,17 @@ export default function AdminApp() {
               </button>
             </div>
 
-            <KleurSectie
-              title="RAL-kleuren"
-              items={ralKleuren}
-              onEdit={(k) => {
-                setIsNewKleur(false)
-                setEditingKleur({ ...k })
-              }}
-            />
-            <KleurSectie
-              title="Houtkleuren"
-              items={eikenKleuren}
-              onEdit={(k) => {
-                setIsNewKleur(false)
-                setEditingKleur({ ...k })
-              }}
-            />
+            {kleurenPerCategorie.map(([cat, items]) => (
+              <KleurSectie
+                key={cat}
+                title={kleurCategorieLabel(cat)}
+                items={items}
+                onEdit={(k) => {
+                  setIsNewKleur(false)
+                  setEditingKleur({ ...k })
+                }}
+              />
+            ))}
           </div>
         )}
 
@@ -1778,10 +1788,15 @@ export default function AdminApp() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
+              const cat = editingKleur.categorie.trim()
+              if (!cat) {
+                setError('Vul een categorienaam in.')
+                return
+              }
               void saveAdminKleur({
                 id: editingKleur.id || undefined,
                 naam: editingKleur.naam,
-                categorie: editingKleur.categorie,
+                categorie: normalizeKleurCategorie(cat),
                 hex: editingKleur.hex,
                 staaltjeUrl: editingKleur.staaltjeUrl,
                 actief: editingKleur.actief,
@@ -1817,19 +1832,53 @@ export default function AdminApp() {
             <Field label="Categorie">
               <select
                 className="field-input"
-                value={editingKleur.categorie}
-                onChange={(e) =>
+                value={
+                  editingKleur.categorie.trim() !== '' &&
+                  kleurCategorieen.includes(
+                    normalizeKleurCategorie(editingKleur.categorie),
+                  )
+                    ? normalizeKleurCategorie(editingKleur.categorie)
+                    : '__nieuw__'
+                }
+                onChange={(e) => {
+                  const v = e.target.value
                   setEditingKleur({
                     ...editingKleur,
-                    categorie: e.target.value,
+                    categorie: v === '__nieuw__' ? '' : v,
                   })
-                }
+                }}
               >
-                <option value="ral">RAL</option>
-                <option value="hout">Hout (eiken, merbau, …)</option>
-                <option value="eiken">Eiken (legacy)</option>
+                {kleurCategorieen.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {kleurCategorieLabel(cat)}
+                  </option>
+                ))}
+                <option value="__nieuw__">Nieuwe categorie…</option>
               </select>
             </Field>
+            {(editingKleur.categorie.trim() === '' ||
+              !kleurCategorieen.includes(
+                normalizeKleurCategorie(editingKleur.categorie),
+              )) && (
+              <Field label="Naam nieuwe categorie">
+                <input
+                  className="field-input"
+                  value={editingKleur.categorie}
+                  onChange={(e) =>
+                    setEditingKleur({
+                      ...editingKleur,
+                      categorie: e.target.value,
+                    })
+                  }
+                  placeholder="bijv. Specials of Poedercoat"
+                  autoFocus
+                />
+                <p className="mt-1 text-xs font-normal text-[var(--colorDarkGray)]">
+                  Wordt opgeslagen als slug (bijv. “Specials” → specials) en
+                  getoond als aparte groep bij de klant.
+                </p>
+              </Field>
+            )}
             <Field label="Hex (fallback-swatch)">
               <input
                 className="field-input"

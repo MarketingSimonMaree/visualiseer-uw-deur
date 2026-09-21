@@ -9,6 +9,7 @@ import {
 } from './generateCore.ts'
 import { processMailResultaat, loadMailTemplates, saveMailTemplate } from '../shared/mailResultaatCore.ts'
 import { MAIL_PLACEHOLDERS } from '../shared/mailTemplates.ts'
+import { normalizeKleurCategorie } from '../shared/kleurCategorie.ts'
 import {
   bearerToken,
   changeAdminPassword,
@@ -477,10 +478,7 @@ export function generateApiPlugin(): Plugin {
                 sendJson(res, 400, { error: 'id en naam zijn verplicht' })
                 return
               }
-              const categorie =
-                body.categorie === 'eiken' || body.categorie === 'ral'
-                  ? body.categorie
-                  : 'ral'
+              const categorie = normalizeKleurCategorie(body.categorie)
               await sql`
                 INSERT INTO kleuren_catalogus (id, naam, categorie, hex, staaltje_url, actief, sort_order, updated_at)
                 VALUES (
