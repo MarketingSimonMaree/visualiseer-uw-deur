@@ -97,42 +97,53 @@ export function KleurKiezer({
         />
       ))}
 
-      <div className="mt-10 border-t border-[var(--colorBorder)] pt-8">
-        <h2 className="section-title text-2xl sm:text-3xl">
-          <span className="gold">Deurbeslag</span>
-        </h2>
-        <p className="mt-2 text-[var(--colorDarkGray)]">
-          Kies de kleur van het beslag. Knop, rozet, brievenbus, greep en ander
-          beslag krijgen allemaal dezelfde afwerking.
-        </p>
-        <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {BESLAG_KLEUREN.map((optie) => {
-            const selected = beslagKleur === optie.id
-            return (
-              <li key={optie.id}>
-                <button
-                  type="button"
-                  onClick={() => onBeslagKleurChange(optie.id)}
-                  className={`choice-card flex items-center gap-3 !py-3 ${selected ? 'is-selected' : ''}`}
-                >
-                  <span
-                    className="h-10 w-10 shrink-0 rounded-md border border-[var(--colorBorder)]"
-                    style={{ background: optie.hex }}
-                    aria-hidden
-                  />
-                  <span className="text-sm font-medium">{optie.naam}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </div>
+      {product.beslagVolgtDeurkleur ? (
+        <div className="note-banner mt-8" role="note">
+          Bij deze collectie is het deurbeslag in dezelfde kleur als de deur —
+          u hoeft geen aparte beslagkleur te kiezen.
+        </div>
+      ) : (
+        <div className="mt-10 border-t border-[var(--colorBorder)] pt-8">
+          <h2 className="section-title text-2xl sm:text-3xl">
+            <span className="gold">Deurbeslag</span>
+          </h2>
+          <p className="mt-2 text-[var(--colorDarkGray)]">
+            Kies de kleur van het beslag. Knop, rozet, brievenbus, greep en ander
+            beslag krijgen allemaal dezelfde afwerking.
+          </p>
+          <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {BESLAG_KLEUREN.map((optie) => {
+              const selected = beslagKleur === optie.id
+              return (
+                <li key={optie.id}>
+                  <button
+                    type="button"
+                    onClick={() => onBeslagKleurChange(optie.id)}
+                    className={`choice-card flex items-center gap-3 !py-3 ${selected ? 'is-selected' : ''}`}
+                  >
+                    <span
+                      className="h-10 w-10 shrink-0 rounded-md border border-[var(--colorBorder)]"
+                      style={{ background: optie.hex }}
+                      aria-hidden
+                    />
+                    <span className="text-sm font-medium">{optie.naam}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       <div className="cta-row items-center">
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!value || !beslagKleur || generating}
+          disabled={
+            !value ||
+            generating ||
+            (!product.beslagVolgtDeurkleur && !beslagKleur)
+          }
           onClick={onGenerate}
         >
           {generating ? 'Bezig…' : 'Bekijk in uw ruimte'}

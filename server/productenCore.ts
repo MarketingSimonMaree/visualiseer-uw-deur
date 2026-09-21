@@ -19,6 +19,7 @@ export type ApiProduct = {
   materiaal: string
   collectie: string
   kleuren: ApiKleur[]
+  beslagVolgtDeurkleur?: boolean
 }
 
 export type AdminProduct = {
@@ -128,6 +129,23 @@ export async function listProducten(
     ]),
   )
 
+  let collectieFlags = new Map<string, boolean>()
+  try {
+    const colRows = await sql`
+      SELECT collectie, beslag_volgt_deurkleur FROM collectie_defaults
+    `
+    collectieFlags = new Map(
+      (
+        colRows as Array<{
+          collectie: string
+          beslag_volgt_deurkleur?: boolean | null
+        }>
+      ).map((r) => [r.collectie, Boolean(r.beslag_volgt_deurkleur)]),
+    )
+  } catch {
+    // kolom ontbreekt nog
+  }
+
   return (
     rows as Array<{
       id: string
@@ -172,6 +190,7 @@ export async function listProducten(
         materiaal: row.materiaal,
         collectie: row.collectie,
         kleuren,
+        beslagVolgtDeurkleur: Boolean(collectieFlags.get(row.collectie)),
       }
     })
     .filter((p) => (montagetype ? p.montagetypes.includes(montagetype) : true))

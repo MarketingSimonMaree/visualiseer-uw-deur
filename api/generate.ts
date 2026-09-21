@@ -195,6 +195,8 @@ function buildPrompt(
       'Hardware: use a standard Dutch lever door handle (deurkruk) when appropriate for this door type.'
 
   const beslagKleurMap: Record<string, string> = {
+    'beslag-deurkleur':
+      'the exact same colour and finish as the door leaf (hardware painted/coated to match the door)',
     'beslag-mat-zwart': 'matte black / powder-coated black metal',
     'beslag-antraciet': 'anthracite / dark grey metal',
     'beslag-rvs': 'brushed stainless steel / silver metal',

@@ -638,6 +638,9 @@ export default function AdminApp() {
                           ·{' '}
                           {beslagLijst.find((b) => b.id === c.beslagId)?.label ??
                             'geen beslag-default'}
+                          {c.beslagVolgtDeurkleur
+                            ? ' · beslag = deurkleur'
+                            : ''}
                         </p>
                       </div>
                       <button
@@ -649,6 +652,9 @@ export default function AdminApp() {
                             ...c,
                             montagetypes: c.montagetypes ?? [],
                             kleurIds: c.kleurIds ?? [],
+                            beslagVolgtDeurkleur: Boolean(
+                              c.beslagVolgtDeurkleur,
+                            ),
                           })
                         }}
                       >
@@ -1380,6 +1386,29 @@ export default function AdminApp() {
                 ))}
               </select>
             </Field>
+
+            <label className="mt-4 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={Boolean(editingCollectie.beslagVolgtDeurkleur)}
+                onChange={(e) =>
+                  setEditingCollectie({
+                    ...editingCollectie,
+                    beslagVolgtDeurkleur: e.target.checked,
+                  })
+                }
+              />
+              <span>
+                <span className="font-medium">
+                  Beslagkleur volgt deurkleur
+                </span>
+                <span className="mt-0.5 block font-normal text-[var(--colorDarkGray)]">
+                  Klant ziet geen aparte beslagkeuze; het beslag wordt in
+                  dezelfde kleur als de deur gegenereerd.
+                </span>
+              </span>
+            </label>
 
             <Field label="Extra info voor de image-agent">
               <textarea

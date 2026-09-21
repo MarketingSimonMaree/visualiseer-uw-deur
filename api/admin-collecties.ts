@@ -56,6 +56,7 @@ type CollectieRow = {
   agent_extra: string
   montagetypes: unknown
   kleur_ids: unknown
+  beslag_volgt_deurkleur?: boolean | null
 }
 
 function mapCollectie(row: CollectieRow) {
@@ -65,6 +66,7 @@ function mapCollectie(row: CollectieRow) {
     agentExtra: row.agent_extra ?? '',
     montagetypes: parseArray(row.montagetypes),
     kleurIds: parseArray(row.kleur_ids),
+    beslagVolgtDeurkleur: Boolean(row.beslag_volgt_deurkleur),
   }
 }
 
@@ -81,6 +83,7 @@ async function ensureSchema(sql: ReturnType<typeof neon>) {
   `
   await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS montagetypes JSONB NOT NULL DEFAULT '[]'::jsonb`
   await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS kleur_ids JSONB NOT NULL DEFAULT '[]'::jsonb`
+  await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS beslag_volgt_deurkleur BOOLEAN NOT NULL DEFAULT false`
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -115,7 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const rows = await sql`
-        SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids
+        SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids, beslag_volgt_deurkleur
         FROM collectie_defaults
         ORDER BY collectie ASC
       `
@@ -132,6 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         agentExtra?: string
         montagetypes?: string[]
         kleurIds?: string[]
+        beslagVolgtDeurkleur?: boolean
         applyToProducts?: boolean
       }
       const collectie = body.collectie?.trim()
@@ -141,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const existing = await sql`
-        SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids
+        SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids, beslag_volgt_deurkleur
         FROM collectie_defaults WHERE collectie = ${collectie} LIMIT 1
       `
       const cur = (existing as CollectieRow[])[0]
@@ -159,14 +163,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body.kleurIds !== undefined
           ? body.kleurIds.map(String)
           : parseArray(cur?.kleur_ids)
+      const beslagVolgtDeurkleur =
+        body.beslagVolgtDeurkleur !== undefined
+          ? Boolean(body.beslagVolgtDeurkleur)
+          : Boolean(cur?.beslag_volgt_deurkleur)
 
       await sql`
         INSERT INTO collectie_defaults (
-          collectie, beslag_id, agent_extra, montagetypes, kleur_ids, updated_at
+          collectie, beslag_id, agent_extra, montagetypes, kleur_ids,
+          beslag_volgt_deurkleur, updated_at
         ) VALUES (
           ${collectie}, ${beslagId}, ${agentExtra},
           ${JSON.stringify(montagetypes)}::jsonb,
           ${JSON.stringify(kleurIds)}::jsonb,
+          ${beslagVolgtDeurkleur},
           now()
         )
         ON CONFLICT (collectie) DO UPDATE SET
@@ -174,6 +184,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           agent_extra = EXCLUDED.agent_extra,
           montagetypes = EXCLUDED.montagetypes,
           kleur_ids = EXCLUDED.kleur_ids,
+          beslag_volgt_deurkleur = EXCLUDED.beslag_volgt_deurkleur,
           updated_at = now()
       `
 
@@ -235,6 +246,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           agent_extra: agentExtra,
           montagetypes,
           kleur_ids: kleurIds,
+          beslag_volgt_deurkleur: beslagVolgtDeurkleur,
         }),
         productsUpdated,
       })

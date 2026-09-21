@@ -82,11 +82,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Collectie-defaults als fallback als product geen types/kleuren heeft
     let collectieDefaults = new Map<
       string,
-      { montagetypes: string[]; kleurIds: string[] }
+      {
+        montagetypes: string[]
+        kleurIds: string[]
+        beslagVolgtDeurkleur: boolean
+      }
     >()
     try {
       const colRows = await sql`
-        SELECT collectie, montagetypes, kleur_ids FROM collectie_defaults
+        SELECT collectie, montagetypes, kleur_ids, beslag_volgt_deurkleur
+        FROM collectie_defaults
       `
       collectieDefaults = new Map(
         (
@@ -94,12 +99,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             collectie: string
             montagetypes: unknown
             kleur_ids: unknown
+            beslag_volgt_deurkleur?: boolean | null
           }>
         ).map((r) => [
           r.collectie,
           {
             montagetypes: parseArray(r.montagetypes),
             kleurIds: parseArray(r.kleur_ids),
+            beslagVolgtDeurkleur: Boolean(r.beslag_volgt_deurkleur),
           },
         ]),
       )
@@ -143,6 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           materiaal: row.materiaal,
           collectie: row.collectie,
           kleuren,
+          beslagVolgtDeurkleur: Boolean(def?.beslagVolgtDeurkleur),
         }
       })
       .filter((p) =>

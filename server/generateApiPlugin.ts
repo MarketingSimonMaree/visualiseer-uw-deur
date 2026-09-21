@@ -770,6 +770,7 @@ export function generateApiPlugin(): Plugin {
               `
               await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS montagetypes JSONB NOT NULL DEFAULT '[]'::jsonb`
               await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS kleur_ids JSONB NOT NULL DEFAULT '[]'::jsonb`
+              await sql`ALTER TABLE collectie_defaults ADD COLUMN IF NOT EXISTS beslag_volgt_deurkleur BOOLEAN NOT NULL DEFAULT false`
 
               const parseArr = (value: unknown): string[] => {
                 if (Array.isArray(value)) return value.map(String)
@@ -799,7 +800,7 @@ export function generateApiPlugin(): Plugin {
                   `
                 }
                 const rows = await sql`
-                  SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids
+                  SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids, beslag_volgt_deurkleur
                   FROM collectie_defaults ORDER BY collectie ASC
                 `
                 sendJson(res, 200, {
@@ -810,6 +811,7 @@ export function generateApiPlugin(): Plugin {
                       agent_extra: string
                       montagetypes: unknown
                       kleur_ids: unknown
+                      beslag_volgt_deurkleur?: boolean | null
                     }>
                   ).map((r) => ({
                     collectie: r.collectie,
@@ -817,6 +819,7 @@ export function generateApiPlugin(): Plugin {
                     agentExtra: r.agent_extra ?? '',
                     montagetypes: parseArr(r.montagetypes),
                     kleurIds: parseArr(r.kleur_ids),
+                    beslagVolgtDeurkleur: Boolean(r.beslag_volgt_deurkleur),
                   })),
                 })
                 return
@@ -829,6 +832,7 @@ export function generateApiPlugin(): Plugin {
                   agentExtra?: string
                   montagetypes?: string[]
                   kleurIds?: string[]
+                  beslagVolgtDeurkleur?: boolean
                   applyToProducts?: boolean
                 }
                 const collectie = body.collectie?.trim()
@@ -837,7 +841,7 @@ export function generateApiPlugin(): Plugin {
                   return
                 }
                 const existing = await sql`
-                  SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids
+                  SELECT collectie, beslag_id, agent_extra, montagetypes, kleur_ids, beslag_volgt_deurkleur
                   FROM collectie_defaults WHERE collectie = ${collectie} LIMIT 1
                 `
                 const cur = (
@@ -846,6 +850,7 @@ export function generateApiPlugin(): Plugin {
                     agent_extra: string
                     montagetypes: unknown
                     kleur_ids: unknown
+                    beslag_volgt_deurkleur?: boolean | null
                   }>
                 )[0]
                 const beslagId =
@@ -864,14 +869,20 @@ export function generateApiPlugin(): Plugin {
                   body.kleurIds !== undefined
                     ? body.kleurIds.map(String)
                     : parseArr(cur?.kleur_ids)
+                const beslagVolgtDeurkleur =
+                  body.beslagVolgtDeurkleur !== undefined
+                    ? Boolean(body.beslagVolgtDeurkleur)
+                    : Boolean(cur?.beslag_volgt_deurkleur)
 
                 await sql`
                   INSERT INTO collectie_defaults (
-                    collectie, beslag_id, agent_extra, montagetypes, kleur_ids, updated_at
+                    collectie, beslag_id, agent_extra, montagetypes, kleur_ids,
+                    beslag_volgt_deurkleur, updated_at
                   ) VALUES (
                     ${collectie}, ${beslagId}, ${agentExtra},
                     ${JSON.stringify(montagetypes)}::jsonb,
                     ${JSON.stringify(kleurIds)}::jsonb,
+                    ${beslagVolgtDeurkleur},
                     now()
                   )
                   ON CONFLICT (collectie) DO UPDATE SET
@@ -879,6 +890,7 @@ export function generateApiPlugin(): Plugin {
                     agent_extra = EXCLUDED.agent_extra,
                     montagetypes = EXCLUDED.montagetypes,
                     kleur_ids = EXCLUDED.kleur_ids,
+                    beslag_volgt_deurkleur = EXCLUDED.beslag_volgt_deurkleur,
                     updated_at = now()
                 `
 
@@ -938,6 +950,7 @@ export function generateApiPlugin(): Plugin {
                     agentExtra,
                     montagetypes,
                     kleurIds,
+                    beslagVolgtDeurkleur,
                   },
                   productsUpdated,
                 })

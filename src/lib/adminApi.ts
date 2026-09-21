@@ -44,6 +44,8 @@ export type CollectieDefault = {
   agentExtra: string
   montagetypes: string[]
   kleurIds: string[]
+  /** Beslagkleur = deurkleur; klant kiest geen aparte beslagkleur. */
+  beslagVolgtDeurkleur: boolean
 }
 
 export type AdminKleur = KleurOptie & {

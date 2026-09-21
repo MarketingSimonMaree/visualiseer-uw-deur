@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Product } from '../types/product'
-import { BESLAG_KLEUREN } from '../data/beslagKleuren'
+import { BESLAG_KLEUREN, isBeslagMatchDoor } from '../data/beslagKleuren'
 import { AiDisclosure } from './AiDisclosure'
 
 interface Props {
@@ -26,8 +26,9 @@ export function GeneratieVoortgang({
   forMail,
 }: Props) {
   const [tipIndex, setTipIndex] = useState(0)
-  const beslagNaam =
-    BESLAG_KLEUREN.find((b) => b.id === beslagKleur)?.naam ?? null
+  const beslagNaam = isBeslagMatchDoor(beslagKleur)
+    ? 'zelfde kleur als de deur'
+    : (BESLAG_KLEUREN.find((b) => b.id === beslagKleur)?.naam ?? null)
 
   useEffect(() => {
     const id = window.setInterval(() => {

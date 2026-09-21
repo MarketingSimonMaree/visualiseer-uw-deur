@@ -7,6 +7,9 @@ export type BeslagKleurOptie = {
   promptLabel: string
 }
 
+/** Sentinel: beslagkleur volgt de deurkleur (geen aparte klantkeuze). */
+export const BESLAG_MATCH_DOOR_ID = 'beslag-deurkleur'
+
 export const BESLAG_KLEUREN: BeslagKleurOptie[] = [
   {
     id: 'beslag-mat-zwart',
@@ -52,7 +55,14 @@ export const BESLAG_KLEUREN: BeslagKleurOptie[] = [
   },
 ]
 
+export function isBeslagMatchDoor(idOrNaam: string | null | undefined): boolean {
+  return idOrNaam === BESLAG_MATCH_DOOR_ID || idOrNaam === 'deurkleur'
+}
+
 export function beslagKleurPromptLabel(idOrNaam: string): string {
+  if (isBeslagMatchDoor(idOrNaam)) {
+    return 'the exact same colour and finish as the door leaf (hardware painted/coated to match the door)'
+  }
   const found = BESLAG_KLEUREN.find(
     (b) => b.id === idOrNaam || b.naam === idOrNaam,
   )

@@ -28,6 +28,11 @@ export interface Product {
   kleuren: KleurOptie[]
   /** Voor catalogusfilters, bijv. "Signature", "Woods". */
   collectie: string
+  /**
+   * Collectie-instelling: beslag in dezelfde kleur als de deur
+   * (geen aparte beslagkleur-keuze voor de klant).
+   */
+  beslagVolgtDeurkleur?: boolean
 }
 
 export type DeurGroep = 'binnen' | 'buiten'

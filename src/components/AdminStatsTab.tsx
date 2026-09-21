@@ -15,7 +15,7 @@ import {
   fetchAdminStats,
   type AdminStatsOverview,
 } from '../lib/adminApi'
-import { BESLAG_KLEUREN } from '../data/beslagKleuren'
+import { BESLAG_KLEUREN, isBeslagMatchDoor } from '../data/beslagKleuren'
 import { MONTAGETYPE_LABELS } from '../types/product'
 
 const CHART_PINK = '#d84f5b'
@@ -76,6 +76,7 @@ function montageLabel(id: string) {
 }
 
 function beslagLabel(id: string) {
+  if (isBeslagMatchDoor(id)) return 'Deurkleur'
   return BESLAG_KLEUREN.find((b) => b.id === id)?.naam ?? id
 }
 

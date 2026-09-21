@@ -32,7 +32,7 @@ import {
   type PublicCatalogusFilter,
 } from './lib/contentApi'
 import type { SituatieTekst } from './lib/adminApi'
-import { BESLAG_KLEUREN } from './data/beslagKleuren'
+import { BESLAG_KLEUREN, BESLAG_MATCH_DOOR_ID, isBeslagMatchDoor } from './data/beslagKleuren'
 import {
   clearDeepLinkFromUrl,
   parseDeepLink,
@@ -70,6 +70,9 @@ function parseDataUrl(raw: string): { base64: string; mime: string } {
 }
 
 function kleurVoorMail(deurKleur: string, beslagId: string | null | undefined) {
+  if (isBeslagMatchDoor(beslagId)) {
+    return `${deurKleur} · beslag in deurkleur`
+  }
   const beslag = BESLAG_KLEUREN.find((b) => b.id === beslagId)?.naam
   return beslag ? `${deurKleur} · beslag ${beslag}` : deurKleur
 }
@@ -279,7 +282,11 @@ export default function App() {
 
   const runGenerate = useCallback(
     async (opts: { isRetry: boolean; delivery?: DeliveryChoice }) => {
-      if (!foto || !product || !kleur || !beslagKleur || !montagetype) return
+      if (!foto || !product || !kleur || !montagetype) return
+      const gekozenBeslag: string | null = product.beslagVolgtDeurkleur
+        ? BESLAG_MATCH_DOOR_ID
+        : beslagKleur
+      if (!gekozenBeslag) return
 
       if (isDailyLimitReached()) {
         trackEvent({ eventType: 'daily_limit_hit' })
@@ -308,7 +315,7 @@ export default function App() {
           foto.blob,
           product.id,
           kleur,
-          beslagKleur,
+          gekozenBeslag,
         )
 
         if (!opts.isRetry) {
@@ -320,7 +327,7 @@ export default function App() {
               productNaam: product.naam,
               montagetype,
               kleur,
-              beslagKleur,
+              beslagKleur: gekozenBeslag,
               fromCache: true,
             })
             const item: GeneratieResultaat = {
@@ -330,7 +337,7 @@ export default function App() {
               productId: product.id,
               productNaam: product.naam,
               kleur,
-              beslagKleur,
+              beslagKleur: gekozenBeslag,
               createdAt: Date.now(),
               fromCache: true,
               isRetry: false,
@@ -349,7 +356,7 @@ export default function App() {
                 bron: 'mail' as const,
                 productId: product.id,
                 productNaam: product.naam,
-                kleur: kleurVoorMail(kleur, beslagKleur),
+                kleur: kleurVoorMail(kleur, gekozenBeslag),
                 montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
                 imageBase64: marked.imageBase64,
                 mimeType: marked.mimeType,
@@ -364,7 +371,7 @@ export default function App() {
                   productNaam: product.naam,
                   montagetype,
                   kleur,
-                  beslagKleur,
+                  beslagKleur: gekozenBeslag,
                   bron: 'mail',
                   prijsindicatie: activeDelivery.prijsindicatie,
                   fromCache: true,
@@ -382,7 +389,7 @@ export default function App() {
                   productNaam: product.naam,
                   montagetype,
                   kleur,
-                  beslagKleur,
+                  beslagKleur: gekozenBeslag,
                   bron: 'mail',
                   fromCache: true,
                 })
@@ -405,7 +412,7 @@ export default function App() {
             productNaam: product.naam,
             montagetype,
             kleur,
-            beslagKleur,
+            beslagKleur: gekozenBeslag,
           })
         }
 
@@ -420,7 +427,7 @@ export default function App() {
           productId: product.id,
           productNaam: product.naam,
           kleur,
-          beslagKleur,
+          beslagKleur: gekozenBeslag,
           montagetype,
           cacheKey,
           sessionId: getAnalyticsSessionId(),
@@ -448,7 +455,7 @@ export default function App() {
           productNaam: product.naam,
           montagetype,
           kleur,
-          beslagKleur,
+          beslagKleur: gekozenBeslag,
           isMock: Boolean(data.mock),
           isRetry: opts.isRetry,
           fromCache: false,
@@ -461,7 +468,7 @@ export default function App() {
           productId: product.id,
           productNaam: product.naam,
           kleur,
-          beslagKleur,
+          beslagKleur: gekozenBeslag,
           createdAt: Date.now(),
           fromCache: false,
           isRetry: opts.isRetry,
@@ -481,7 +488,7 @@ export default function App() {
               bron: 'mail',
               productId: product.id,
               productNaam: product.naam,
-              kleur: kleurVoorMail(kleur, beslagKleur),
+              kleur: kleurVoorMail(kleur, gekozenBeslag),
               montagetype: MONTAGETYPE_LABELS[montagetype] ?? montagetype,
               imageBase64: marked.imageBase64,
               mimeType: marked.mimeType,
@@ -500,7 +507,7 @@ export default function App() {
               productNaam: product.naam,
               montagetype,
               kleur,
-              beslagKleur,
+              beslagKleur: gekozenBeslag,
               bron: 'mail',
               prijsindicatie: activeDelivery.prijsindicatie,
             })
@@ -511,7 +518,7 @@ export default function App() {
               productNaam: product.naam,
               montagetype,
               kleur,
-              beslagKleur,
+              beslagKleur: gekozenBeslag,
               bron: 'mail',
             })
             setMailBevestiging({
@@ -529,7 +536,7 @@ export default function App() {
           productNaam: product?.naam,
           montagetype: montagetype ?? undefined,
           kleur: kleur ?? undefined,
-          beslagKleur: beslagKleur ?? undefined,
+          beslagKleur: gekozenBeslag ?? undefined,
           errorMessage: err instanceof Error ? err.message : 'onbekend',
           isRetry: opts.isRetry,
         })
@@ -673,6 +680,9 @@ export default function App() {
             value={kleur}
             onChange={(next) => {
               setKleur(next)
+              if (product.beslagVolgtDeurkleur) {
+                setBeslagKleur(BESLAG_MATCH_DOOR_ID)
+              }
               trackEvent({
                 eventType: 'kleur_selected',
                 productId: product.id,
