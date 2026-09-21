@@ -1,9 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { neon } from '@neondatabase/serverless'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { normalizeKleurCategorie } from '../shared/kleurCategorie'
 
 export const config = { maxDuration: 30 }
+
+/** Inline (geen shared-import): Vercel bundelt ../shared niet betrouwbaar. */
+function normalizeKleurCategorie(raw: string | null | undefined): string {
+  const slug = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+  return slug || 'ral'
+}
 
 function bootstrapPassword() {
   return process.env.ADMIN_PASSWORD?.trim() || 'admin1234'
