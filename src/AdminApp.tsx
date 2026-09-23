@@ -339,7 +339,8 @@ export default function AdminApp() {
       id: candidate,
       naam: `${p.naam} (kopie)`,
       afbeeldingUrl: p.afbeeldingUrl,
-      paginaUrl: p.paginaUrl,
+      // Unieke pagina_url: lege waarde → API vult /producten/{id}/ in
+      paginaUrl: '',
       montagetypes: p.montagetypes?.length ? p.montagetypes : [p.montagetype],
       materiaal: p.materiaal,
       collectie: p.collectie,
@@ -1146,6 +1147,19 @@ export default function AdminApp() {
                 }
                 className="field-input"
               />
+            </Field>
+            <Field label="Productpagina-URL (optioneel)">
+              <input
+                value={editing.paginaUrl ?? ''}
+                onChange={(e) =>
+                  setEditing({ ...editing, paginaUrl: e.target.value })
+                }
+                className="field-input"
+                placeholder={`https://www.simonmaree.nl/producten/${editing.id || '…'}/`}
+              />
+              <p className="mt-1 text-xs font-normal text-[var(--colorDarkGray)]">
+                Leeg laten = automatisch op basis van het ID. Moet uniek zijn.
+              </p>
             </Field>
             <Field label="Collectie">
               <input
