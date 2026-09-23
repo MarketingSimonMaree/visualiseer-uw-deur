@@ -324,6 +324,32 @@ export default function AdminApp() {
     })
   }
 
+  /** Kopieer een bestaand model: zelfde settings, nieuw id/naam/afbeelding invullen. */
+  function startDuplicate(p: AdminProduct) {
+    const baseId = p.id.replace(/-kopie(-\d+)?$/i, '')
+    let candidate = `${baseId}-kopie`
+    let n = 2
+    const existing = new Set(producten.map((x) => x.id.toLowerCase()))
+    while (existing.has(candidate.toLowerCase())) {
+      candidate = `${baseId}-kopie-${n}`
+      n += 1
+    }
+    setIsNew(true)
+    setEditing({
+      id: candidate,
+      naam: `${p.naam} (kopie)`,
+      afbeeldingUrl: p.afbeeldingUrl,
+      paginaUrl: p.paginaUrl,
+      montagetypes: p.montagetypes?.length ? p.montagetypes : [p.montagetype],
+      materiaal: p.materiaal,
+      collectie: p.collectie,
+      kleurIds: p.kleurIds?.length ? p.kleurIds : [],
+      beslagId: p.beslagId ?? null,
+      agentExtra: p.agentExtra ?? '',
+      actief: true,
+    })
+  }
+
   async function onSaveProduct(e: FormEvent) {
     e.preventDefault()
     if (!editing) return
@@ -586,6 +612,13 @@ export default function AdminApp() {
                       }
                     >
                       {p.actief ? 'Uitschakelen' : 'Activeren'}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-[var(--colorBorder)] px-3 py-1.5 text-sm"
+                      onClick={() => startDuplicate(p)}
+                    >
+                      Dupliceren
                     </button>
                     <button
                       type="button"
@@ -1074,8 +1107,18 @@ export default function AdminApp() {
       </main>
 
       {editing && (
-        <Modal title={isNew ? 'Nieuw product' : 'Product bewerken'} onClose={() => setEditing(null)}>
+        <Modal
+          title={isNew ? 'Product dupliceren / nieuw' : 'Product bewerken'}
+          onClose={() => setEditing(null)}
+        >
           <form onSubmit={onSaveProduct}>
+            {isNew && (
+              <p className="mb-3 text-sm text-[var(--colorDarkGray)]">
+                Pas minstens het <strong>ID</strong>, de <strong>naam</strong> en
+                de <strong>afbeelding-URL</strong> aan. Collectie, kleuren,
+                montagetypes en beslag blijven overgenomen.
+              </p>
+            )}
             <Field label="ID (slug)">
               <input
                 required
@@ -1083,6 +1126,7 @@ export default function AdminApp() {
                 value={editing.id}
                 onChange={(e) => setEditing({ ...editing, id: e.target.value })}
                 className="field-input"
+                placeholder="bijv. wk1382-3"
               />
             </Field>
             <Field label="Naam">
