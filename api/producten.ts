@@ -86,11 +86,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         montagetypes: string[]
         kleurIds: string[]
         beslagVolgtDeurkleur: boolean
+        beslagKleurIds: string[]
       }
     >()
     try {
       const colRows = await sql`
-        SELECT collectie, montagetypes, kleur_ids, beslag_volgt_deurkleur
+        SELECT collectie, montagetypes, kleur_ids, beslag_volgt_deurkleur, beslag_kleur_ids
         FROM collectie_defaults
       `
       collectieDefaults = new Map(
@@ -100,6 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             montagetypes: unknown
             kleur_ids: unknown
             beslag_volgt_deurkleur?: boolean | null
+            beslag_kleur_ids?: unknown
           }>
         ).map((r) => [
           r.collectie,
@@ -107,6 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             montagetypes: parseArray(r.montagetypes),
             kleurIds: parseArray(r.kleur_ids),
             beslagVolgtDeurkleur: Boolean(r.beslag_volgt_deurkleur),
+            beslagKleurIds: parseArray(r.beslag_kleur_ids),
           },
         ]),
       )
@@ -151,6 +154,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           collectie: row.collectie,
           kleuren,
           beslagVolgtDeurkleur: Boolean(def?.beslagVolgtDeurkleur),
+          beslagKleurIds: def?.beslagKleurIds ?? [],
         }
       })
       .filter((p) =>

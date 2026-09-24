@@ -36,6 +36,7 @@ import { AdminFiltersTab } from './components/AdminFiltersTab'
 import { AdminStatsTab } from './components/AdminStatsTab'
 import { AdminTekstenTab } from './components/AdminTekstenTab'
 import { buildVisualiseerProductUrl } from './lib/deepLink'
+import { BESLAG_KLEUREN } from './data/beslagKleuren'
 import {
   compareKleurCategorie,
   kleurCategorieLabel,
@@ -674,7 +675,9 @@ export default function AdminApp() {
                             'geen beslag-default'}
                           {c.beslagVolgtDeurkleur
                             ? ' · beslag = deurkleur'
-                            : ''}
+                            : c.beslagKleurIds?.length
+                              ? ` · ${c.beslagKleurIds.length} beslagkleuren`
+                              : ' · alle beslagkleuren'}
                         </p>
                       </div>
                       <button
@@ -689,6 +692,7 @@ export default function AdminApp() {
                             beslagVolgtDeurkleur: Boolean(
                               c.beslagVolgtDeurkleur,
                             ),
+                            beslagKleurIds: c.beslagKleurIds ?? [],
                           })
                         }}
                       >
@@ -1467,6 +1471,52 @@ export default function AdminApp() {
                 </span>
               </span>
             </label>
+
+            {!editingCollectie.beslagVolgtDeurkleur && (
+              <fieldset className="mt-4">
+                <legend className="text-sm font-medium">
+                  Beslagkleuren voor de klant
+                </legend>
+                <p className="mt-1 text-xs font-normal text-[var(--colorDarkGray)]">
+                  Niets aangevinkt = alle kleuren. Vink aan wat bij deze
+                  collectie mag.
+                </p>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {BESLAG_KLEUREN.map((optie) => {
+                    const checked = (
+                      editingCollectie.beslagKleurIds ?? []
+                    ).includes(optie.id)
+                    return (
+                      <label
+                        key={optie.id}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const cur = editingCollectie.beslagKleurIds ?? []
+                            const next = checked
+                              ? cur.filter((x) => x !== optie.id)
+                              : [...cur, optie.id]
+                            setEditingCollectie({
+                              ...editingCollectie,
+                              beslagKleurIds: next,
+                            })
+                          }}
+                        />
+                        <span
+                          className="inline-block h-4 w-4 rounded border"
+                          style={{ background: optie.hex }}
+                          aria-hidden
+                        />
+                        {optie.naam}
+                      </label>
+                    )
+                  })}
+                </div>
+              </fieldset>
+            )}
 
             <Field label="Extra info voor de image-agent">
               <textarea

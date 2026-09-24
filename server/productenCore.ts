@@ -20,6 +20,7 @@ export type ApiProduct = {
   collectie: string
   kleuren: ApiKleur[]
   beslagVolgtDeurkleur?: boolean
+  beslagKleurIds?: string[]
 }
 
 export type AdminProduct = {
@@ -129,18 +130,28 @@ export async function listProducten(
     ]),
   )
 
-  let collectieFlags = new Map<string, boolean>()
+  let collectieFlags = new Map<
+    string,
+    { beslagVolgtDeurkleur: boolean; beslagKleurIds: string[] }
+  >()
   try {
     const colRows = await sql`
-      SELECT collectie, beslag_volgt_deurkleur FROM collectie_defaults
+      SELECT collectie, beslag_volgt_deurkleur, beslag_kleur_ids FROM collectie_defaults
     `
     collectieFlags = new Map(
       (
         colRows as Array<{
           collectie: string
           beslag_volgt_deurkleur?: boolean | null
+          beslag_kleur_ids?: unknown
         }>
-      ).map((r) => [r.collectie, Boolean(r.beslag_volgt_deurkleur)]),
+      ).map((r) => [
+        r.collectie,
+        {
+          beslagVolgtDeurkleur: Boolean(r.beslag_volgt_deurkleur),
+          beslagKleurIds: parseArray(r.beslag_kleur_ids),
+        },
+      ]),
     )
   } catch {
     // kolom ontbreekt nog
@@ -181,6 +192,7 @@ export async function listProducten(
           staaltjeUrl: null,
         }
       })
+      const flags = collectieFlags.get(row.collectie)
       return {
         id: row.id,
         naam: row.naam,
@@ -190,7 +202,8 @@ export async function listProducten(
         materiaal: row.materiaal,
         collectie: row.collectie,
         kleuren,
-        beslagVolgtDeurkleur: Boolean(collectieFlags.get(row.collectie)),
+        beslagVolgtDeurkleur: Boolean(flags?.beslagVolgtDeurkleur),
+        beslagKleurIds: flags?.beslagKleurIds ?? [],
       }
     })
     .filter((p) => (montagetype ? p.montagetypes.includes(montagetype) : true))

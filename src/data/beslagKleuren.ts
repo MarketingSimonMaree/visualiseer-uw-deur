@@ -59,6 +59,16 @@ export function isBeslagMatchDoor(idOrNaam: string | null | undefined): boolean 
   return idOrNaam === BESLAG_MATCH_DOOR_ID || idOrNaam === 'deurkleur'
 }
 
+/** Filter beslagkleuren voor een collectie. Lege lijst = alle standaardkleuren. */
+export function beslagKleurenVoorIds(
+  ids: string[] | null | undefined,
+): BeslagKleurOptie[] {
+  if (!ids || ids.length === 0) return BESLAG_KLEUREN
+  const set = new Set(ids)
+  const filtered = BESLAG_KLEUREN.filter((b) => set.has(b.id))
+  return filtered.length > 0 ? filtered : BESLAG_KLEUREN
+}
+
 export function beslagKleurPromptLabel(idOrNaam: string): string {
   if (isBeslagMatchDoor(idOrNaam)) {
     return 'the exact same colour and finish as the door leaf (hardware painted/coated to match the door)'

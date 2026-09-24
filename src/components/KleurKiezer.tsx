@@ -1,5 +1,5 @@
 import type { KleurOptie, Product } from '../types/product'
-import { BESLAG_KLEUREN } from '../data/beslagKleuren'
+import { beslagKleurenVoorIds } from '../data/beslagKleuren'
 import {
   compareKleurCategorie,
   kleurCategorieLabel,
@@ -47,6 +47,7 @@ export function KleurKiezer({
   remaining,
 }: Props) {
   const kleuren = normalizeKleuren(product)
+  const beslagOpties = beslagKleurenVoorIds(product.beslagKleurIds)
   const groepen = (() => {
     const map = new Map<string, KleurOptie[]>()
     for (const k of kleuren) {
@@ -112,7 +113,7 @@ export function KleurKiezer({
             beslag krijgen allemaal dezelfde afwerking.
           </p>
           <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {BESLAG_KLEUREN.map((optie) => {
+            {beslagOpties.map((optie) => {
               const selected = beslagKleur === optie.id
               return (
                 <li key={optie.id}>

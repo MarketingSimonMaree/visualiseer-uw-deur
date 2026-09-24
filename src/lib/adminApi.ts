@@ -46,6 +46,11 @@ export type CollectieDefault = {
   kleurIds: string[]
   /** Beslagkleur = deurkleur; klant kiest geen aparte beslagkleur. */
   beslagVolgtDeurkleur: boolean
+  /**
+   * Toegestane beslagkleuren (ids uit BESLAG_KLEUREN).
+   * Leeg = alle standaardkleuren.
+   */
+  beslagKleurIds: string[]
 }
 
 export type AdminKleur = KleurOptie & {

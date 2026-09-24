@@ -33,6 +33,11 @@ export interface Product {
    * (geen aparte beslagkleur-keuze voor de klant).
    */
   beslagVolgtDeurkleur?: boolean
+  /**
+   * Toegestane beslagkleur-ids voor deze collectie.
+   * Leeg/undefined = alle standaardkleuren.
+   */
+  beslagKleurIds?: string[]
 }
 
 export type DeurGroep = 'binnen' | 'buiten'
